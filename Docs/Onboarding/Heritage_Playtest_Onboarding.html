@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heritage Playtest Onboarding</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1c2427;
+    --body: #333b3e;
+    --muted: #6b7477;
+    --accent: #1f5f66;
+    --line: #d5dadb;
+    --fill: #eef2f2;
+    --paper: #ffffff;
+  }
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: #e4e6e7; }
+  body {
+    font-family: "Inter", "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--body);
+    font-size: 11pt;
+    line-height: 1.55;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page {
+    width: 210mm;
+    height: 297mm;
+    margin: 10mm auto;
+    padding: 22mm 22mm 18mm;
+    background: var(--paper);
+    position: relative;
+    overflow: hidden;
+    page-break-after: always;
+    break-after: page;
+  }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+  @media print {
+    html { background: none; }
+    .page { margin: 0; }
+  }
+
+  .game { font-size: 34pt; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; line-height: 1.1; }
+  .tagline { font-size: 12pt; color: var(--muted); margin-top: 3mm; }
+  h1 {
+    font-size: 19pt; font-weight: 700; color: var(--ink);
+    letter-spacing: -0.01em; line-height: 1.2;
+    padding-bottom: 4mm; border-bottom: 1.2pt solid var(--ink);
+    margin-bottom: 8mm;
+  }
+  .game + .tagline + h1 { margin-top: 14mm; }
+  h2 { font-size: 12.5pt; font-weight: 600; color: var(--accent); margin-bottom: 1.8mm; }
+  section { margin-bottom: 8.5mm; }
+  section:last-of-type { margin-bottom: 0; }
+  p + p { margin-top: 2mm; }
+  ul { list-style: none; }
+  li { position: relative; padding-left: 5mm; }
+  li + li { margin-top: 1.4mm; }
+  li::before {
+    content: ""; position: absolute; left: 0.6mm; top: 0.62em;
+    width: 1.6mm; height: 1.6mm; border-radius: 50%; background: var(--accent);
+  }
+  b { font-weight: 600; color: var(--ink); }
+  .key {
+    display: inline-block; font-size: 9pt; font-weight: 600; color: var(--ink);
+    border: 0.8pt solid #9aa3a5; border-radius: 1.2mm;
+    padding: 0 1.4mm; line-height: 1.5; background: #f7f8f8;
+    white-space: nowrap;
+  }
+  .footer {
+    position: absolute; left: 22mm; right: 22mm; bottom: 12mm;
+    font-size: 8.5pt; color: var(--muted); text-align: right;
+  }
+
+  .p1 section { margin-bottom: 11mm; }
+  .p1, .p2 { font-size: 11.5pt; line-height: 1.6; }
+  .p2 section { margin-bottom: 10mm; }
+
+  /* Page 3 */
+  .p3 { padding-top: 20mm; font-size: 10.5pt; line-height: 1.5; }
+  .p3 section { margin-bottom: 5.5mm; }
+  .p3 h1 { margin-bottom: 5mm; }
+  .p3 h2 { margin-bottom: 1.4mm; }
+  .p3 p + p { margin-top: 1.2mm; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8mm; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; line-height: 1.35; }
+  caption {
+    text-align: left; font-size: 8pt; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em; padding-bottom: 0.6mm;
+  }
+  td { padding: 0.8mm 0; border-top: 0.6pt solid var(--line); vertical-align: middle; }
+  td:first-child { width: 46%; padding-right: 2mm; white-space: nowrap; }
+  table + table { margin-top: 2.6mm; }
+  .key { font-size: 8.5pt; }
+  svg { display: block; width: 100%; height: auto; }
+  svg text { font-family: "Inter", "Segoe UI", Helvetica, Arial, sans-serif; }
+  .diagram { margin: 2mm 0 1.6mm; }
+</style>
+</head>
+<body>
+
+<!-- ============ PAGE 1 ============ -->
+<div class="page p1">
+  <div class="game">Heritage</div>
+  <div class="tagline">A first-person investigation game about an old manor and its damaged film reels.</div>
+
+  <h1>Game Context, World, and Narrative</h1>
+
+  <section>
+    <h2>Initial story or premise</h2>
+    <p>A set of damaged film reels arrives with a commission: catalogue an old manor and restore the moments the footage has lost. The film can no longer show what happened in those gaps, but the rooms may still hold the answer.</p>
+  </section>
+
+  <section>
+    <h2>World and setting</h2>
+    <p>The manor exists in two times. In the present it is empty, dusty and quiet. The reels show the same rooms in the past, with the people who lived there.</p>
+    <p>Intact footage plays like a record you can only watch. Where the film is damaged, the scene freezes, and you can step inside that frozen moment.</p>
+  </section>
+
+  <section>
+    <h2>Player identity and motivation</h2>
+    <p>You are a historian hired to identify the heirlooms that matter and reconstruct the stories they carry. What you put into a gap is your own reading of the evidence. The original footage always stays as it was.</p>
+  </section>
+
+  <section>
+    <h2>Initial onboarding</h2>
+    <p>This playtest covers one room and one reel: the Entrance Hall. Watch the footage on both sides of a gap and look for what changed. Inside the gap, look around carefully before you touch anything.</p>
+  </section>
+
+  <div class="footer">1 / 3</div>
+</div>
+
+<!-- ============ PAGE 2 ============ -->
+<div class="page p2">
+  <h1>Game Rules, Objectives, and Conditions</h1>
+
+  <section>
+    <h2>Primary objective</h2>
+    <p>Restore one gap in the Entrance Hall reel. Study the footage around it, act out what you think happened, then save the result as a photo and upload it into the reel.</p>
+  </section>
+
+  <section>
+    <h2>Secondary objectives</h2>
+    <p>Scan more objects, find optional moments, and return to footage you have already seen. Use the Map and the Archive to connect what you find.</p>
+  </section>
+
+  <section>
+    <h2>Core rules</h2>
+    <ul>
+      <li><b>Playback is for watching.</b> You can play, pause and scrub the reel, but nothing in it can be changed.</li>
+      <li><b>Inside a gap, time is frozen.</b> You can walk around and scan objects with the lens. Each scan adds a clue, and only scanned objects can be handled.</li>
+      <li><b>Objects respond to what you do.</b> There are no choice menus or solution lists. The game records your actions as they happen.</li>
+      <li><b>The Archive shapes the result.</b> Your reconstruction becomes a photo. Adjust its Scene, Audio and Light before you upload it.</li>
+      <li><b>The original stays intact.</b> Nothing you do rewrites the intact footage.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Win conditions</h2>
+    <p>Use both required objects in the gap to unlock its reconstruction photo. Open the photo in the Archive, save your edit, then upload it. The photo fills that spot in the reel and the edit is locked, though you can still watch it again. Completing this one full loop finishes the playtest.</p>
+  </section>
+
+  <section>
+    <h2>Lose / failure conditions</h2>
+    <p>There is no timer and no game over. If a gap stays open, watch the reel again and try another action. An uploaded reconstruction is final and cannot be edited.</p>
+  </section>
+
+  <div class="footer">2 / 3</div>
+</div>
+
+<!-- ============ PAGE 3 ============ -->
+<div class="page p3">
+  <h1>Controls and How to Play</h1>
+
+  <section>
+    <h2>Controls</h2>
+    <div class="controls">
+      <div>
+        <table>
+          <caption>Movement</caption>
+          <tr><td><span class="key">W A S D</span></td><td>Move</td></tr>
+          <tr><td>Hold <span class="key">Right mouse</span></td><td>Look around</td></tr>
+          <tr><td><span class="key">Shift</span></td><td>Run</td></tr>
+          <tr><td><span class="key">C</span></td><td>Crouch</td></tr>
+        </table>
+        <table>
+          <caption>Objects</caption>
+          <tr><td><span class="key">Tab</span></td><td>Raise / lower the lens</td></tr>
+          <tr><td><span class="key">E</span></td><td>Pick up / interact up close</td></tr>
+          <tr><td>Tap <span class="key">R</span></td><td>Use / put down</td></tr>
+          <tr><td>Hold <span class="key">R</span>, release</td><td>Throw</td></tr>
+        </table>
+      </div>
+      <div>
+        <table>
+          <caption>Reel</caption>
+          <tr><td><span class="key">Space</span></td><td>Play / pause</td></tr>
+                    <tr><td><span class="key">Alt</span> / <span class="key">Option</span></td><td>Enter the selected gap</td></tr>
+        </table>
+        <table>
+          <caption>Menus</caption>
+          <tr><td><span class="key">J</span></td><td>Archive: clues, reels and reconstructions</td></tr>
+          <tr><td><span class="key">M</span></td><td>Map: rooms and scanned objects</td></tr>
+          <tr><td><span class="key">Esc</span></td><td>Back</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Basic actions</h2>
+    <p><b>Scan:</b> raise the lens and aim at a nearby object. The room fades, the object returns to its own color, and a chime confirms the scan.</p>
+    <p><b>Handle:</b> lower the lens, pick the object up, and use it where it makes sense. Then watch what changes.</p>
+  </section>
+
+  <section>
+    <h2>How to play</h2>
+    <div class="diagram">
+      <svg viewBox="0 0 660 92" role="img" aria-label="Watch, scan and try it repeat until the photo unlocks, then save and upload.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#1f5f66"/>
+          </marker>
+        </defs>
+        <g font-size="15" font-weight="600" text-anchor="middle" fill="#1c2427">
+          <rect x="2"   y="14" width="104" height="44" rx="6" fill="#eef2f2" stroke="#1f5f66" stroke-width="1.4"/>
+          <text x="54"  y="41">Watch</text>
+          <rect x="138" y="14" width="104" height="44" rx="6" fill="#eef2f2" stroke="#1f5f66" stroke-width="1.4"/>
+          <text x="190" y="41">Scan</text>
+          <rect x="274" y="14" width="104" height="44" rx="6" fill="#eef2f2" stroke="#1f5f66" stroke-width="1.4"/>
+          <text x="326" y="41">Try it</text>
+          <rect x="410" y="14" width="104" height="44" rx="6" fill="#eef2f2" stroke="#1f5f66" stroke-width="1.4"/>
+          <text x="462" y="41">Save</text>
+          <rect x="554" y="14" width="104" height="44" rx="6" fill="#1f5f66" stroke="#1f5f66" stroke-width="1.4"/>
+          <text x="606" y="41" fill="#ffffff">Upload</text>
+        </g>
+        <g stroke="#1f5f66" stroke-width="1.6" fill="none" marker-end="url(#ah)">
+          <line x1="108" y1="36" x2="135" y2="36"/>
+          <line x1="244" y1="36" x2="271" y2="36"/>
+          <line x1="380" y1="36" x2="407" y2="36"/>
+          <line x1="516" y1="36" x2="551" y2="36"/>
+          <path d="M326,60 L326,76 Q326,84 318,84 L62,84 Q54,84 54,76 L54,63"/>
+        </g>
+      </svg>
+    </div>
+    <p>Compare the shots around the gap, scan the objects that matter, and try using them. If the gap stays open, watch again and try another action. Once its photo unlocks, adjust Scene, Audio and Light in the Archive, save your edit, and upload it into the reel.</p>
+  </section>
+
+  <section>
+    <h2>Getting started</h2>
+    <div class="diagram">
+      <svg viewBox="0 0 660 140" role="img" aria-label="Six steps from the start screen to uploading the photo.">
+        <defs>
+          <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#1f5f66"/>
+          </marker>
+        </defs>
+        <g fill="#ffffff" stroke="#1f5f66" stroke-width="1.4">
+          <rect x="2"   y="4"  width="196" height="56" rx="6"/>
+          <rect x="232" y="4"  width="196" height="56" rx="6"/>
+          <rect x="462" y="4"  width="196" height="56" rx="6"/>
+          <rect x="2"   y="84" width="196" height="56" rx="6"/>
+          <rect x="232" y="84" width="196" height="56" rx="6"/>
+          <rect x="462" y="84" width="196" height="56" rx="6"/>
+        </g>
+        <g font-size="13" font-weight="700" fill="#1f5f66">
+          <text x="14"  y="25">1</text><text x="244" y="25">2</text><text x="474" y="25">3</text>
+          <text x="14"  y="105">4</text><text x="244" y="105">5</text><text x="474" y="105">6</text>
+        </g>
+        <g font-size="14" font-weight="600" fill="#1c2427">
+          <text x="34"  y="25">Start screen</text>
+          <text x="264" y="25">Open the reel</text>
+          <text x="494" y="25">Enter a gap</text>
+          <text x="34"  y="105">Scan and use</text>
+          <text x="264" y="105">Open the photo</text>
+          <text x="494" y="105">Save and upload</text>
+        </g>
+        <g font-size="12.5" fill="#333b3e">
+          <text x="34"  y="46">From the Beginning</text>
+          <text x="264" y="46">Reel icon, bottom left</text>
+          <text x="494" y="46">Down arrow or Alt</text>
+          <text x="34"  y="126">Tab, then E / R</text>
+          <text x="264" y="126">J → reel → room → gap</text>
+          <text x="494" y="126">Disk icon, film arrow</text>
+        </g>
+        <g stroke="#1f5f66" stroke-width="1.6" fill="none" marker-end="url(#ah2)">
+          <line x1="200" y1="32" x2="229" y2="32"/>
+          <line x1="430" y1="32" x2="459" y2="32"/>
+          <path d="M560,62 L560,72 L100,72 L100,81"/>
+          <line x1="200" y1="112" x2="229" y2="112"/>
+          <line x1="430" y1="112" x2="459" y2="112"/>
+        </g>
+      </svg>
+    </div>
+    <p>In the Entrance Hall, scrub the filmstrip to a gap before you enter it. Use the hooked arrow ↩ whenever you want to go back and compare the footage again.</p>
+  </section>
+
+  <div class="footer">3 / 3</div>
+</div>
+
+</body>
+</html>

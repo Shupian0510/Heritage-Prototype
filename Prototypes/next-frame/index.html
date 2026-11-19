@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>下一帧 · Heritage 原型 2</title>
+<!--
+  Heritage 玩具原型 2：下一帧
+  底子：Richard 的初版原型（UE，书房的一个傍晚：火里的钥匙、管家、水壶、画像后面藏钥匙）。
+        沿用它的房间和故事，不沿用代码。
+  和初版的区别：玩家不能在过去亲手做动作再提交。过去是一帧一帧定格的房间，只能看、只能拍；
+        要让下一帧出现，只能把剪片贴到胶卷的下一帧上，再显影。
+  问题（是/否）：不亲手做动作，只靠"往下一帧上贴剪片"一帧一帧往下推，
+        "接下来发生了什么"能不能让人去推理，而不是把剪片挨个试？
+  动词：看（在定格的一帧里走动）、拍照（得到剪片）、贴（剪片 → 画面里的一个位置）、显影、撕掉重贴；
+        回到现在以后：使用。
+  想要的体验：贴之前心里有一个猜测；显影的时候想看"到底会怎样"；
+        片尾揭开一个自己没贴过的秘密，回到现在靠它把门打开。
+  规则：
+    1. 贴在画面哪里，下一帧它就在哪里。东西由管家去搬，世界按自己的规矩给出后果（没有对错提示）。
+    2. 一卷只有 3 个空帧。管家一拿到钥匙，片尾就自己接上；3 帧用完还没拿到，片尾接不上，只能撕掉重贴。
+    3. 片尾的内容不由玩家贴：那是胶卷的秘密。
+    4. 现在的房间不会因为胶卷而改变。暗格一直能打开，只是不知道就不会去敲那一块。
+  媒介：Three.js 单文件。测的是规则和流程，不依赖引擎本身。
+  用法：直接打开本文件。按 ` 打开调试面板。网址后加 ?frames=4 可以改空帧数量；?nolock 不锁鼠标（方向键转视角）。
+  结论（2026-11-18 试玩）：这一版不继续，换到 UE 里以 Richard 原型为底重做（原型 3）。
+        对"能不能推理"没有直接给是或否，给出的是做法上要改的地方：
+        1. 过去要专注在第一人称。正放、倒放时间时是身边的物体在变，不是从固定机位看胶卷画面。
+        2. 在当前帧拍照扫描物品，记进笔记，同时角色说出对这条线索的想法。
+        3. 右上角用豆子显示这一帧还有多少线索可拍（绿色普通，黄色关键），拍过的灭掉只留框。
+        4. 线索够了就原地打开 diegetic 的笔记本，把照片和位置拼起来回答"接下来发生了什么"。
+           无论对错，3D 世界都要给出反应，让玩家知道自己有没有推进。
+        5. 谜题要重新设计，每一帧的可交互物和剧情暗示要更精彩。
+        6. 结局的秘密不必是"墙后的钥匙"这么直白，但仍然是一个现实里的秘密，回到现实靠它解谜。
+-->
+<style>
+  :root{ --bg:#14120d; --panel:#1e1b14; --line:#3a3528; --ink:#e9e2cf; --dim:#9b927c; --amber:#e8b24a; --ok:#9fc37a; }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{ margin:0; overflow:hidden; background:#000; color:var(--ink); font:15px/1.5 "PingFang SC","Microsoft YaHei",system-ui,sans-serif; user-select:none; -webkit-user-select:none; }
+  button{ font:inherit; color:inherit; }
+
+  #c{ position:fixed; inset:0; width:100%; height:100%; display:block; }
+  #c.past{ filter:sepia(.62) saturate(.8) contrast(1.06); }
+  #c.now{ filter:saturate(.6) brightness(.97); }
+  #vig{ position:fixed; inset:0; z-index:1; pointer-events:none; background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%); }
+  #flash{ position:fixed; inset:0; z-index:5; pointer-events:none; background:#fff3d0; opacity:0; }
+  #gate{ position:fixed; inset:0; z-index:6; pointer-events:none; display:none; }
+  #gate.on{ display:block; }
+  #gate i{ position:absolute; left:0; right:0; height:9vh; background:#080705; }
+  #gate i:first-child{ top:0; } #gate i:last-child{ bottom:0; }
+  #gate i::after{ content:""; position:absolute; left:0; right:0; top:50%; height:2.6vh; transform:translateY(-50%); background:repeating-linear-gradient(90deg,#2b2620 0 2.2vh,transparent 2.2vh 4.4vh); }
+
+  #hud{ position:fixed; inset:0; z-index:10; pointer-events:none; text-shadow:0 1px 3px #000; }
+  #era{ position:absolute; left:16px; top:12px; font-size:13px; color:var(--dim); letter-spacing:.1em; }
+  #legend{ position:absolute; right:16px; top:12px; font-size:12px; color:var(--dim); }
+  kbd{ display:inline-block; min-width:20px; padding:0 5px; margin-right:3px; border:1px solid #fff7; border-radius:3px; background:#0007; color:var(--ink); font:inherit; text-align:center; }
+  #cross{ position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px; border-radius:50%; background:#fffb; box-shadow:0 0 0 1px #0007; }
+  #cross.hot{ width:22px; height:22px; margin:-11px; background:none; border:2px solid var(--amber); box-shadow:none; }
+  #prompt{ position:absolute; left:0; right:0; top:calc(50% + 30px); text-align:center; font-size:14px; }
+  #cap{ position:absolute; left:10%; right:10%; bottom:112px; text-align:center; font-size:18px; opacity:0; transition:opacity .3s; }
+  #cap.on{ opacity:1; }
+  #toast{ position:absolute; left:0; right:0; top:17%; text-align:center; font-size:16px; color:var(--amber); opacity:0; transition:opacity .3s; }
+  #toast.on{ opacity:1; }
+  #strip{ position:absolute; left:16px; bottom:14px; display:none; gap:4px; padding:9px 6px; background:#0c0b08d9; border:1px solid var(--line); border-radius:4px; }
+  #cuts{ position:absolute; right:16px; bottom:14px; display:flex; gap:6px; }
+
+  /* 胶卷的一格：小条和举起来的大条共用 */
+  .fcell{ width:150px; flex:none; }
+  #strip .fcell{ width:86px; }
+  .fcell .im{ position:relative; aspect-ratio:16/9; display:grid; place-items:center; overflow:hidden; border:2px solid transparent; border-radius:3px; background:#17140f; color:var(--dim); font-size:13px; }
+  .fcell.cur .im{ border-color:#fff8; }
+  .fcell.next .im{ border-color:var(--amber); color:var(--amber); font-size:20px; }
+  .fcell.torn .im{ border:2px dashed var(--line); }
+  .fcell img{ display:block; width:100%; height:100%; object-fit:cover; filter:sepia(.62) saturate(.8); }
+  .fcell .num{ position:absolute; left:4px; top:1px; font-size:11px; color:#fff; text-shadow:0 1px 2px #000; }
+  .fcell p{ margin:4px 0 0; min-height:34px; font-size:11px; line-height:1.4; color:var(--dim); }
+  .fcell p em{ font-style:normal; color:var(--ink); }
+
+  .card{ display:flex; flex-direction:column; align-items:center; gap:2px; padding:5px 5px 2px; border:0; border-radius:3px; background:#f1ead8; color:#2b2620; font-size:13px; text-shadow:none; box-shadow:0 2px 0 #0009; }
+  .card img,.card .sw{ display:block; width:64px; height:64px; object-fit:cover; background:#8a8170; }
+  .card img.past{ filter:sepia(.62) saturate(.8); }
+  .card img.now{ filter:saturate(.6); }
+  .card.mini{ padding:3px 3px 0; font-size:11px; }
+  .card.mini img,.card.mini .sw{ width:40px; height:40px; }
+
+  .ov{ position:fixed; inset:0; z-index:20; display:none; place-items:center; padding:16px; }
+  .ov.show{ display:grid; }
+  #film{ background:#0b0a07eb; }
+  .fv{ width:min(1180px,100%); display:grid; gap:10px; }
+  .fstrip{ position:relative; display:flex; justify-content:center; gap:6px; padding:16px 10px 10px; background:#0c0b08; border:1px solid var(--line); border-radius:6px; }
+  .fstrip::before,.fstrip::after{ content:""; position:absolute; left:10px; right:10px; height:6px; background:repeating-linear-gradient(90deg,#3a3528 0 10px,transparent 10px 20px); }
+  .fstrip::before{ top:5px; } .fstrip::after{ bottom:3px; }
+  .fmain{ display:grid; grid-template-columns:minmax(0,1fr) 190px; gap:12px; align-items:start; }
+  .fframe{ position:relative; width:min(100%, calc((100vh - 330px) * 16 / 9)); min-width:320px; aspect-ratio:16/9; margin:0 auto; overflow:hidden; background:#241d14; border:1px solid var(--line); border-radius:6px; }
+  #fghost{ position:absolute; inset:0; width:100%; height:100%; filter:sepia(.62) saturate(.8); }
+  .fframe.ghosted #fghost{ opacity:.45; filter:sepia(.85) saturate(.6) blur(.5px); }
+  .anc{ position:absolute; width:13%; aspect-ratio:1; transform:translate(-50%,-50%); border:2px dashed var(--amber); border-radius:50%; opacity:0; pointer-events:none; transition:opacity .15s; }
+  .anc b{ position:absolute; left:50%; top:100%; transform:translateX(-50%); font-size:12px; font-weight:500; color:var(--amber); white-space:nowrap; text-shadow:0 1px 2px #000; }
+  #film.dragging .anc,#film.holding .anc{ opacity:.8; }
+  #film .anc.near{ opacity:1; background:#e8b24a40; }
+  .pasted{ position:absolute; transform:translate(-50%,-50%) rotate(-4deg); cursor:pointer; }
+  .pasted::before{ content:""; position:absolute; left:50%; top:-5px; width:26px; height:9px; margin-left:-13px; background:#d9c88fe6; }
+  .ftray{ background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:12px; }
+  .ftray h2{ margin:0 0 10px; font-size:13px; font-weight:500; color:var(--dim); letter-spacing:.12em; }
+  #ftray{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+  .cut{ cursor:grab; touch-action:none; transition:transform .12s; }
+  .cut:hover{ transform:translateY(-2px); }
+  .cut.held{ outline:3px solid var(--amber); transform:translateY(-3px) rotate(-2deg); }
+  .hint{ margin:0; font-size:12px; color:var(--dim); grid-column:1 / -1; }
+  .fbar{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+  #fq{ font-size:18px; }
+  #fhint{ margin-right:auto; font-size:13px; color:var(--dim); }
+  .btn{ background:#2a261c; border:1px solid var(--line); border-radius:4px; padding:6px 12px; cursor:pointer; }
+  .btn:hover{ border-color:var(--dim); }
+  .btn:disabled{ opacity:.4; cursor:default; }
+  .btn.go:not(:disabled){ border-color:var(--amber); color:var(--amber); }
+  #ghost{ position:fixed; z-index:40; display:none; pointer-events:none; transform:translate(-50%,-60%) rotate(-5deg); box-shadow:0 10px 24px #000a; }
+
+  #pause{ background:#000a; cursor:pointer; }
+  .box{ width:min(460px,100%); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:22px 24px; }
+  .box h1,.box h2{ margin:0 0 4px; font-size:20px; font-weight:600; letter-spacing:.1em; }
+  .box .sub{ margin:0 0 14px; color:var(--dim); font-size:13px; }
+  .box .keys{ margin:0 0 14px; font-size:13px; line-height:2.1; }
+  .box .go{ margin:0; color:var(--amber); }
+  #end{ background:#000c; }
+  .stats{ display:grid; grid-template-columns:auto 1fr; gap:4px 16px; margin:12px 0 16px; font-size:14px; }
+  .stats dt{ color:var(--dim); } .stats dd{ margin:0; text-align:right; font-variant-numeric:tabular-nums; }
+  .btns{ display:flex; flex-wrap:wrap; gap:8px; }
+  textarea{ width:100%; height:110px; margin-top:10px; background:#0c0b08; color:var(--ink); border:1px solid var(--line); border-radius:4px; font:12px/1.4 ui-monospace,Consolas,monospace; }
+
+  #debug{ position:fixed; z-index:30; right:0; top:0; bottom:0; width:min(360px,100%); padding:16px; overflow-x:hidden; overflow-y:auto; background:#100e0a; border-left:1px solid var(--line); transform:translateX(100%); transition:transform .18s; font-size:13px; user-select:text; -webkit-user-select:text; }
+  #debug.show{ transform:none; }
+  #debug h3{ margin:16px 0 6px; font-size:12px; font-weight:500; color:var(--dim); letter-spacing:.1em; }
+  #debug h3:first-child{ margin-top:0; }
+  #debug dl{ margin:0; } #debug dt{ margin-top:6px; color:var(--dim); } #debug dd{ margin:0; }
+  #debug pre{ margin:0; white-space:pre-wrap; color:var(--dim); font:12px/1.45 ui-monospace,Consolas,monospace; }
+
+  @media (max-width:860px){ .fmain{ grid-template-columns:1fr; } #ftray{ grid-template-columns:repeat(5,1fr); } .fcell{ width:110px; } }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
+</head>
+<body>
+<canvas id="c" class="now"></canvas>
+<div id="vig"></div>
+<div id="flash"></div>
+<div id="gate"><i></i><i></i></div>
+
+<div id="hud">
+  <div id="era"></div>
+  <div id="legend"></div>
+  <div id="cross"></div>
+  <div id="prompt"></div>
+  <div id="cap"></div>
+  <div id="toast"></div>
+  <div id="strip"></div>
+  <div id="cuts"></div>
+</div>
+
+<div class="ov" id="film"><div class="fv">
+  <div class="fstrip" id="fstrip"></div>
+  <div class="fmain">
+    <div class="fframe" id="fframe"><img id="fghost" alt=""><div id="fanchors"></div><div id="fpaste"></div></div>
+    <aside class="ftray"><h2>剪片</h2><div id="ftray"></div></aside>
+  </div>
+  <div class="fbar">
+    <span id="fq"></span><span id="fhint"></span>
+    <button class="btn go" id="bDev">显影（回车）</button>
+    <button class="btn" id="bPeel">撕掉上一帧（X）</button>
+    <button class="btn" id="bDown">放下胶卷（F）</button>
+    <button class="btn" id="bNow">回到现在（R）</button>
+  </div>
+</div></div>
+<div class="card" id="ghost"></div>
+
+<div class="ov show" id="pause"><div class="box">
+  <h1>下一帧</h1>
+  <p class="sub">Heritage 原型 2 · 书房，某个傍晚</p>
+  <p class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走　　<kbd>鼠标</kbd> 看<br><kbd>左键</kbd> 拍照　　<kbd>E</kbd> 使用</p>
+  <p class="go" id="pauseGo">点击开始</p>
+  <p class="sub" style="margin:10px 0 0">Esc 放开鼠标　　` 调试面板</p>
+</div></div>
+
+<div class="ov" id="end"><div class="box">
+  <h2>门开了</h2>
+  <p class="sub">这个原型到这里结束。</p>
+  <dl class="stats" id="stats"></dl>
+  <div class="btns">
+    <button class="btn" id="copyLog">复制试玩日志</button>
+    <button class="btn" id="stay">继续逛</button>
+    <button class="btn" id="again">再来一次</button>
+  </div>
+  <textarea id="logdump" hidden readonly></textarea>
+</div></div>
+
+<aside id="debug">
+  <h3>操作</h3>
+  <div class="btns">
+    <button class="btn" id="dbgReset">重置</button>
+    <button class="btn" id="dbgGive">给全部剪片</button>
+    <button class="btn" id="dbgPast">跳到过去</button>
+    <button class="btn" id="dbgSolve">直接推完</button>
+    <button class="btn" id="dbgCopy">复制日志</button>
+    <button class="btn" id="dbgClose">关闭</button>
+  </div>
+  <h3>答案</h3>
+  <pre id="answers"></pre>
+  <h3>最近的操作</h3>
+  <pre id="logtail"></pre>
+  <h3>关于这个原型</h3>
+  <dl>
+    <dt>问题</dt><dd>不亲手做动作，只靠往下一帧上贴剪片一帧一帧往下推，"接下来发生了什么"能不能让人去推理，而不是把剪片挨个试？</dd>
+    <dt>动词</dt><dd>看、拍照、贴、显影、撕掉重贴；回到现在以后：使用。</dd>
+    <dt>想要的体验</dt><dd>贴之前心里有一个猜测；显影时想看到底会怎样；片尾揭开一个自己没贴过的秘密，回到现在靠它开门。</dd>
+    <dt>试玩时看什么</dt><dd>贴之前有没有先在那一帧里走动、看水壶里面；第一次贴的是什么；片尾接不上几次；回到现在以后敲错几块墙板；有没有人发现花瓶那条路。</dd>
+    <dt>结论</dt><dd>2026-11-18 试玩：这一版不继续，换到 UE 里以 Richard 原型为底重做。过去要专注第一人称，正放倒放时身边的物体在变；拍照扫描记笔记并配角色对白；线索豆；原地打开笔记本拼照片和位置，对错都有世界反应；谜题重做；结局的秘密不必是墙后的钥匙。</dd>
+  </dl>
+</aside>
+
+<script type="module">
+import * as THREE from 'three';
+
+const $ = s => document.querySelector(s);
+const QS = new URLSearchParams(location.search);
+let NOLOCK = QS.has('nolock');
+const MAX_PASTE = Math.max(2, Math.min(5, +QS.get('frames') || 3));
+
+/* ---------- 名词与位置 ---------- */
+const NOUN = { butler:'管家', kettle:'水壶', vase:'花瓶', key:'钥匙', book:'书' };
+const OBJ = ['kettle','vase','book'];                      // 管家搬得动的东西
+// anchor = 贴在画面上的位置；stand/look = 管家站哪、朝哪；slots = 东西放下来的位置
+const PLACES = {
+  door:    { name:'门',    anchor:[-3.9,1.15,-2.0],   stand:[-3.1,-2.0],  look:[-4,-2.0],   slots:[[-3.35,0,-1.2],[-3.35,0,-0.8],[-3.0,0,-1.0]] },
+  portrait:{ name:'画像',  anchor:[-2.06,1.45,-3.45], stand:[-2.3,-2.75], look:[-2.3,-3.5], slots:[[-2.9,0,-3.15],[-1.3,0,-3.15],[-2.6,0,-2.9]] },
+  fire:    { name:'壁炉',  anchor:[0,0.55,-3.1],      stand:[0,-2.15],    look:[0,-3.5],    slots:[[0.3,0.06,-3.2],[0.35,0.06,-2.9],[-0.2,0.06,-2.75]] },
+  basin:   { name:'水盆',  anchor:[3.5,1.0,-2.5],     stand:[2.85,-2.5],  look:[4,-2.5],    slots:[[3.5,0.86,-2.02],[3.5,0.86,-2.98],[2.9,0,-1.8]] },
+  table:   { name:'书桌',  anchor:[-1.8,0.9,0.4],     stand:[-1.8,-0.4],  look:[-1.8,0.4],  slots:[[-2.3,0.8,0.4],[-1.3,0.8,0.45],[-1.8,0.8,0.6]] },
+  pedestal:{ name:'花瓶台', anchor:[1.4,1.15,0.3],     stand:[1.4,-0.45],  look:[1.4,0.3],   slots:[[1.4,1.0,0.3],[1.95,0,0.3],[0.85,0,0.3]] },
+};
+const START = { stand:[-2.9,-1.7], look:[0,-3.2] };
+const spot = at => at === 'start' ? START : PLACES[at];
+const S0 = { fire:true, open:false, butler:{ at:'start', pose:'look' },
+  kettle:{ at:'table', slot:0, filled:false }, book:{ at:'table', slot:1, gone:false }, vase:{ at:'pedestal', slot:0, water:true }, key:{ at:'fire' } };
+const clone = s => JSON.parse(JSON.stringify(s));
+
+/* ---------- 规则：贴在哪里，下一帧它就在哪里 ---------- */
+function moveTo(s, id, place){
+  const o = s[id]; if (o.at === place) return;
+  const used = OBJ.filter(k => k !== id && !s[k].gone && s[k].at === place).map(k => s[k].slot);
+  let i = 0; while (used.includes(i)) i++;
+  o.at = place; o.slot = i;
+}
+function resolve(s0, noun, place){
+  const s = clone(s0), P = PLACES[place].name, hot = s.key.at === 'fire' && s.fire;
+  let cap, pose = 'stand', fx = null, via = null, carry = null, keyAt;
+  s.butler.at = place;
+  if (noun === 'butler' || (noun !== 'key' && s[noun].gone)){
+    if (noun !== 'butler') cap = `${NOUN[noun]}已经烧没了。管家空着手走到${P}边。`;
+    else if (place === 'fire' && hot){ pose = 'recoil'; fx = 'flare'; cap = '管家伸手去够，被火逼了回来。'; }
+    else if (place === 'fire' && s.key.at === 'fire'){ s.key.at = 'butler'; pose = 'hold'; cap = '管家从灰里捡起了钥匙。'; }
+    else if (place === 'basin'){ pose = 'reach'; cap = '管家在水盆里洗了洗手。'; }
+    else cap = `管家走到${P}边。`;
+  } else if (noun === 'key'){
+    if (hot){ s.butler.at = 'fire'; pose = 'recoil'; fx = 'flare'; cap = '管家伸手去够，被火逼了回来。'; }
+    else { s.key.at = 'butler'; pose = 'hold';
+      if (place === 'fire' || s0.butler.at === 'fire') cap = place === 'fire' ? '管家从灰里捡起了钥匙。' : `管家捡起钥匙，走到${P}边。`;
+      else cap = `管家捡起钥匙，走到${P}边。`;
+      if (place !== 'fire' && s0.butler.at !== 'fire'){ via = PLACES.fire.stand; keyAt = 0.42; } }
+  } else {
+    const o = s[noun], N = NOUN[noun];
+    if (s0[noun].at !== s0.butler.at) via = PLACES[s0[noun].at].stand;
+    carry = noun; moveTo(s, noun, place); pose = 'place'; cap = `管家把${N}拿到${P}边。`;
+    if (noun === 'kettle' || noun === 'vase'){
+      const full = noun === 'kettle' ? 'filled' : 'water';
+      if (place === 'basin'){ o[full] = true; pose = 'fill'; cap = noun === 'kettle' ? '管家把水壶按进水盆，灌满了。' : '管家给花瓶添了水。'; }
+      else if (place === 'fire'){ pose = 'pour';
+        if (o[full]){ o[full] = false;
+          if (s.fire){ s.fire = false; fx = 'steam'; cap = noun === 'kettle' ? '管家把一壶水浇进壁炉。火灭了。' : '管家把花瓶里的水泼进壁炉。火灭了。'; }
+          else cap = `管家把${N}里的水倒在了灰上。`; }
+        else cap = s.fire ? `管家朝火里倒了倒${N}。火还烧着。` : `管家把${N}搁进了壁炉。`; }
+    } else if (noun === 'book' && place === 'fire' && s.fire){ o.gone = true; fx = 'flare'; cap = '管家把书扔进火里。烧起来了。'; }
+  }
+  s.butler.pose = pose;
+  return { state:s, cap, fx, plan:{ via, carry, keyAt } };
+}
+function tailState(s0){ const s = clone(s0); s.butler.at = 'portrait'; s.butler.pose = 'hide'; s.key.at = 'hidden'; s.open = true; return s; }
+const TAIL_CAP = '管家掀开了画像。';
+
+/* ---------- 三维基础 ---------- */
+const canvas = $('#c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0a08);
+const EYE = 1.62;
+const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 50); camera.rotation.order = 'YXZ'; scene.add(camera);
+const filmCam = new THREE.PerspectiveCamera(57, 16/9, 0.05, 50); filmCam.position.set(0, 2.35, 3.35); filmCam.lookAt(0, 0.9, -2.0);
+const HFOV = 88 * Math.PI / 180;                           // 摄影机的水平视角固定，换比例时不丢左右两边
+function filmAspect(a){ filmCam.aspect = a; filmCam.fov = 2 * Math.atan(Math.tan(HFOV/2) / a) * 180 / Math.PI; filmCam.updateProjectionMatrix(); }
+filmAspect(16/9); filmCam.updateMatrixWorld();
+const UV = {};                                             // 每个位置在画面上的坐标（0~1）
+for (const [id,p] of Object.entries(PLACES)){ const v = new THREE.Vector3(...p.anchor).project(filmCam); UV[id] = { x:(v.x + 1)/2, y:(1 - v.y)/2 }; }
+
+const lerp = (a,b,t) => a + (b - a) * t;
+const clamp = (v,a,b) => Math.min(b, Math.max(a, v));
+const sstep = (t,a = 0,b = 1) => { t = clamp((t - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const lerpAng = (a,b,t) => { const d = (((b - a + Math.PI) % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI) - Math.PI; return a + d * t; };
+const M = (c, extra) => new THREE.MeshLambertMaterial(Object.assign({ color:c }, extra));
+function box(p, w,h,d, x,y,z, c){ const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), c.isMaterial ? c : M(c)); m.position.set(x,y,z); p.add(m); return m; }
+function cyl(p, rt,rb,h, x,y,z, c, seg = 16){ const m = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg), c.isMaterial ? c : M(c)); m.position.set(x,y,z); p.add(m); return m; }
+function ball(p, r, x,y,z, c){ const m = new THREE.Mesh(new THREE.SphereGeometry(r,14,10), c.isMaterial ? c : M(c)); m.position.set(x,y,z); p.add(m); return m; }
+const noRay = m => { m.raycast = () => {}; return m; };
+
+/* ---------- 房间外壳（两个时代共用） ---------- */
+const shell = new THREE.Group(); scene.add(shell);
+box(shell, 8.4,0.2,7.4, 0,-0.1,0, 0x5a4a3a);               // 地板
+box(shell, 3.0,0.012,1.9, 0.1,0.006,-0.9, 0x5a2e2a);       // 地毯
+box(shell, 8.4,0.2,7.4, 0,3.1,0, 0x8a8478);                // 天花板
+box(shell, 8.4,3,0.2, 0,1.5,-3.6, 0x7d7566);               // 北墙
+box(shell, 8.4,3,0.2, 0,1.5,3.6, 0x857d6e);
+box(shell, 0.2,3,7.4, -4.1,1.5,0, 0x857d6e);
+box(shell, 0.2,3,7.4, 4.1,1.5,0, 0x857d6e);
+box(shell, 0.3,1.0,0.5, -0.75,0.5,-3.25, 0x6f685a);        // 壁炉
+box(shell, 0.3,1.0,0.5, 0.75,0.5,-3.25, 0x6f685a);
+box(shell, 1.8,2.0,0.5, 0,2.0,-3.25, 0x6f685a);
+box(shell, 1.2,1.0,0.02, 0,0.5,-3.49, 0x15120e);
+box(shell, 1.2,0.04,0.5, 0,0.02,-3.25, 0x2a2622);
+box(shell, 2.1,0.07,0.24, 0,1.22,-2.93, 0x4a4035);         // 壁炉架
+const OBS = [[-0.9,0.9,-3.5,-3.0], [-2.6,-1.0,0.0,0.8], [1.2,1.6,0.1,0.5], [3.2,3.8,-3.15,-1.85]];   // 墙垛、书桌、花瓶台、洗手台
+
+/* ---------- 小道具 ---------- */
+function makeKettle(c){ const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.15,0.22,16,1,true), M(c, { side:THREE.DoubleSide })); body.position.y = 0.11; g.add(body);
+  cyl(g, 0.15,0.15,0.012, 0,0.006,0, c);
+  cyl(g, 0.118,0.118,0.008, 0,0.03,0, 0x1a1612);                                             // 壶里：空的时候看得到底
+  g.userData.water = cyl(g, 0.115,0.115,0.01, 0,0.19,0, new THREE.MeshBasicMaterial({ color:0x4f93e0 })); g.userData.water.visible = false;
+  box(g, 0.14,0.03,0.04, 0.17,0.15,0, c).rotation.z = 0.5;
+  const h = new THREE.Mesh(new THREE.TorusGeometry(0.12,0.012,6,14,Math.PI), M(0x2a2a2a)); h.position.y = 0.22; g.add(h);
+  return g; }
+function makeVase(c, dead){ const g = new THREE.Group();
+  cyl(g, 0.1,0.15,0.42, 0,0.21,0, c); cyl(g, 0.12,0.1,0.05, 0,0.445,0, c);
+  for (const [x,z,hh] of [[0.03,0,0.3],[-0.04,0.03,0.24],[0,-0.04,0.34]]){ cyl(g, 0.008,0.008,hh, x,0.46 + hh/2,z, dead ? 0x5a4a30 : 0x4e7a3a, 6); ball(g, 0.045, x,0.46 + hh,z, dead ? 0x6b5030 : 0xc0392b); }
+  return g; }
+function makeBook(c){ const g = new THREE.Group(); box(g, 0.24,0.05,0.17, 0,0.025,0, c); box(g, 0.22,0.036,0.172, 0.012,0.025,0, 0xe6dcc0); return g; }
+function makeKey(){ const g = new THREE.Group(), m = new THREE.MeshLambertMaterial({ color:0xe8bc2c, emissive:0x000000 });
+  const add = (geo, x,y) => { const k = new THREE.Mesh(geo, m); k.position.set(x,y,0); g.add(k); };
+  add(new THREE.TorusGeometry(0.035,0.011,6,14), -0.06,0); add(new THREE.BoxGeometry(0.12,0.018,0.018), 0.03,0);
+  add(new THREE.BoxGeometry(0.018,0.036,0.018), 0.075,-0.02); add(new THREE.BoxGeometry(0.018,0.028,0.018), 0.045,-0.016);
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.13,8,6), new THREE.MeshBasicMaterial({ transparent:true, opacity:0, depthWrite:false })));   // 好瞄一点
+  g.userData.mat = m; g.scale.setScalar(1.6); return g; }
+function makeReel(){ const g = new THREE.Group(); cyl(g, 0.12,0.12,0.05, 0,0.025,0, 0xb9bcc0, 20); cyl(g, 0.03,0.03,0.054, 0,0.027,0, 0x4a4a4a, 10); return g; }
+function makeButler(){ const g = new THREE.Group(); g.userData.noun = 'butler';
+  box(g, 0.32,0.5,0.22, 0,0.25,0, 0x23262e);
+  const torso = new THREE.Group(); torso.position.y = 0.5; g.add(torso);
+  cyl(torso, 0.17,0.2,0.95, 0,0.475,0, 0x34425f);
+  box(torso, 0.14,0.4,0.03, 0,0.62,0.185, 0xece7d9);                                          // 衬衫前襟：看得出他朝哪边
+  ball(torso, 0.13, 0,1.1,0, 0xcdaa8a); box(torso, 0.04,0.04,0.05, 0,1.09,0.135, 0xb08a6a); box(torso, 0.22,0.07,0.22, 0,1.21,-0.01, 0x23262e);
+  const arm = x => { const pv = new THREE.Group(); pv.position.set(x,0.88,0); torso.add(pv); box(pv, 0.09,0.6,0.09, 0,-0.3,0, 0x34425f); pv.userData.hand = ball(pv, 0.055, 0,-0.63,0, 0xcdaa8a); return pv; };
+  g.userData.armR = arm(-0.26); g.userData.armL = arm(0.26); g.userData.torso = torso; return g; }
+function portraitTex(kind){ const c = document.createElement('canvas'); c.width = 128; c.height = 168; const x = c.getContext('2d');
+  x.fillStyle = kind === 'lord' ? '#2e3a2c' : '#3a2c34'; x.fillRect(0,0,128,168);
+  x.fillStyle = kind === 'lord' ? '#1c2030' : '#7a4a5a'; x.beginPath(); x.ellipse(64,172,52,72,0,0,7); x.fill();
+  x.fillStyle = '#d2b08c'; x.beginPath(); x.ellipse(64,72,22,28,0,0,7); x.fill();
+  if (kind === 'lord'){ x.fillStyle = '#111'; x.fillRect(32,42,64,8); x.fillRect(44,12,40,32); }
+  else { x.fillStyle = '#4a3020'; x.beginPath(); x.ellipse(64,56,27,22,0,Math.PI,0); x.fill(); x.beginPath(); x.arc(64,30,13,0,7); x.fill(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
+function picture(g, w,h, cx,cy, tex){ const pv = new THREE.Group(); pv.position.set(cx - w/2, cy, -3.452); g.add(pv);   // 铰链在左边
+  box(pv, w,h,0.04, w/2,0,0, 0x3a2c1c);
+  const pm = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.1, h - 0.1), tex.isTexture ? new THREE.MeshLambertMaterial({ map:tex }) : M(tex)); pm.position.set(w/2,0,0.021); pv.add(pm);
+  return pv; }
+
+/* ---------- 一个时代的房间 ---------- */
+const PW = 0.775, PH = 0.85, HX = -4 + 2*PW + PW/2;        // 墙板尺寸；藏钥匙的那块（左边第 3 列第 2 行）的中心 x
+function furnish(g, era){
+  const P = era === 'past', R = { panels:[] };
+  const wood = P ? 0x7a5a3a : 0x5c5348, panel = P ? 0x6e5a44 : 0x5d564b;
+  box(g, 1.6,0.06,0.8, -1.8,0.77,0.4, wood);                                                 // 书桌
+  for (const [x,z] of [[-2.5,0.1],[-1.1,0.1],[-2.5,0.7],[-1.1,0.7]]) box(g, 0.07,0.74,0.07, x,0.37,z, wood);
+  box(g, 0.4,1.0,0.4, 1.4,0.5,0.3, P ? 0x9a9488 : 0x77736a);                                 // 花瓶台
+  box(g, 0.6,0.85,1.3, 3.5,0.425,-2.5, wood);                                                // 洗手台和水盆
+  cyl(g, 0.27,0.2,0.1, 3.5,0.9,-2.5, 0xd8d4c8);
+  cyl(g, 0.24,0.24,0.012, 3.5,0.952,-2.5, P ? new THREE.MeshBasicMaterial({ color:0x4f93e0 }) : 0x2a2824);
+  box(g, 0.08,0.3,0.08, 3.92,1.3,-2.5, 0x8a8a8a);
+  box(g, 0.02,1.5,1.2, 3.99,1.6,0.9, new THREE.MeshBasicMaterial({ color:P ? 0xffb060 : 0xc4d2ee }));   // 窗
+  box(g, 0.04,1.6,0.06, 3.975,1.6,0.9, 0x3a342c); box(g, 0.04,0.06,1.3, 3.975,1.6,0.9, 0x3a342c);
+  R.doorPivot = new THREE.Group(); R.doorPivot.position.set(-3.97,0,-2.5); g.add(R.doorPivot);          // 门（铰链在靠北的一侧）
+  const door = box(R.doorPivot, 0.06,2.1,1.0, 0,1.05,0.5, P ? 0x6b4a2c : 0x54483a); if (!P) door.userData.use = 'door';
+  ball(R.doorPivot, 0.04, 0.06,1.0,0.88, 0xd8c08a);
+  for (const z of [-2.56,-1.44]) box(g, 0.08,2.2,0.1, -3.96,1.1,z, 0x3a2c1c);
+  box(g, 0.08,0.1,1.22, -3.96,2.2,-2.0, 0x3a2c1c);
+  R.doorLight = box(g, 0.02,2.1,1.0, -3.995,1.05,-2.0, new THREE.MeshBasicMaterial({ color:0xfff4d8 })); R.doorLight.visible = false;
+  for (const side of [0,1]) for (let c = 0; c < 4; c++) for (let r = 0; r < 3; r++){                    // 北墙的墙板
+    const x0 = side ? 0.9 + c*PW : -4 + c*PW, hollow = side === 0 && c === 2 && r === 1;
+    const pv = new THREE.Group(); pv.position.set(hollow ? x0 + PW - 0.02 : x0 + 0.02, 0.15 + r*PH + PH/2, -3.485); g.add(pv);
+    const m = box(pv, PW - 0.04, PH - 0.04, 0.03, (hollow ? -1 : 1) * (PW - 0.04)/2, 0, 0, panel);
+    if (!P) m.userData.use = 'panel'; m.userData.hollow = hollow;
+    if (hollow) R.hollow = pv;
+    R.panels.push(m);
+  }
+  box(g, 0.6,0.62,0.004, HX,1.425,-3.498, 0x0a0806);                                         // 暗格里面
+  return R;
+}
+
+/* ---------- 现在 ---------- */
+const now = new THREE.Group(); scene.add(now);
+const nowR = furnish(now, 'now');
+now.add(new THREE.HemisphereLight(0xcfdcff, 0x4a443c, 3.0));
+{ const d = new THREE.DirectionalLight(0xcfe0ff, 1.5); d.position.set(5,3,1.5); now.add(d); }
+nowR.reel = makeReel(); nowR.reel.position.set(-1.45,0.8,0.3); nowR.reel.userData.use = 'reel'; now.add(nowR.reel);
+{ const b = makeBook(0x4a3a34); b.position.set(-2.25,0.8,0.5); b.rotation.y = 0.5; b.userData.use = 'junk'; now.add(b); }
+{ const k = makeKettle(0x6b3a22); k.position.set(0.3,0.21,-3.2); k.rotation.z = Math.PI/2; k.userData.noun = 'kettle'; k.userData.use = 'junk'; now.add(k); }   // 锈水壶躺在冷掉的壁炉里
+box(now, 0.9,0.05,0.3, 0,0.06,-3.25, 0x4a4844);                                              // 冷灰
+nowR.vase = makeVase(0x6f7f86, true); nowR.vase.position.set(1.4,1.0,0.3); nowR.vase.userData.noun = 'vase'; nowR.vase.userData.use = 'vase'; now.add(nowR.vase);
+nowR.reel2 = makeReel(); nowR.reel2.position.set(1.4,1.0,0.3); nowR.reel2.userData.use = 'reel2'; nowR.reel2.visible = false; now.add(nowR.reel2);
+nowR.cavKey = makeKey(); nowR.cavKey.position.set(HX,1.45,-3.474); nowR.cavKey.rotation.z = -Math.PI/2; nowR.cavKey.userData.use = 'nowkey'; nowR.cavKey.userData.noun = 'key'; nowR.cavKey.visible = false; now.add(nowR.cavKey);
+// 画被摘走以后墙上留下的浅印：两幅一样大的画像，一面小镜子
+{ const pale = M(0x7b7366), mk = (w,h, parent, x,y,z) => { const m = noRay(new THREE.Mesh(new THREE.PlaneGeometry(w,h), pale)); m.position.set(x,y,z); parent.add(m); };
+  mk(0.6,0.78, nowR.hollow, -(PW - 0.04)/2, 0, 0.017); mk(0.6,0.78, now, -HX,1.425,-3.468); mk(0.4,0.4, now, -4 + PW/2,1.425,-3.468); }
+const handKey = makeKey(); handKey.position.set(0.3,-0.24,-0.6); handKey.rotation.set(0.2,-0.5,0.3); handKey.scale.setScalar(0.9); handKey.visible = false; camera.add(handKey);
+const nowS = { open:false, vase:false }, hand = { key:false };
+
+/* ---------- 过去 ---------- */
+const past = new THREE.Group(); past.visible = false; scene.add(past);
+const pastR = furnish(past, 'past');
+const HEMI_LIT = 1.9, HEMI_OUT = 1.5, FIRE_I = 36;
+const pastHemi = new THREE.HemisphereLight(0xffe2b8, 0x40301e, HEMI_LIT); past.add(pastHemi);
+{ const d = new THREE.DirectionalLight(0xffa060, 0.6); d.position.set(5,2.5,1.5); past.add(d); }
+const fire = {};
+{ const l1 = cyl(past, 0.06,0.06,0.7, -0.1,0.1,-3.22, 0x2a1c12, 8); l1.rotation.set(0,0.3,Math.PI/2);
+  const l2 = cyl(past, 0.06,0.06,0.6, 0.12,0.1,-3.32, 0x2a1c12, 8); l2.rotation.set(0,-0.4,Math.PI/2);
+  box(past, 0.9,0.03,0.3, 0,0.05,-3.25, 0x3a3632);
+  fire.flames = new THREE.Group(); fire.flames.position.set(0,0.08,-3.26); past.add(fire.flames);
+  for (const [x,z,h,c] of [[-0.25,0,0.45,0xff7a1a],[0,0.03,0.65,0xffa424],[0.25,-0.02,0.5,0xff7a1a],[-0.1,-0.06,0.35,0xffd24a],[0.12,0.06,0.3,0xffd24a]]){
+    const m = noRay(new THREE.Mesh(new THREE.ConeGeometry(0.14,h,8), new THREE.MeshBasicMaterial({ color:c, transparent:true, opacity:.85 }))); m.position.set(x,h/2,z); fire.flames.add(m); }
+  fire.light = new THREE.PointLight(0xff8a30, FIRE_I, 14, 1.6); fire.light.position.set(0,0.7,-2.75); past.add(fire.light); }
+const pObj = { kettle:makeKettle(0xb5773f), vase:makeVase(0x7fa3b8, false), book:makeBook(0x8a3a2e) };
+for (const id of OBJ){ pObj[id].userData.noun = id; past.add(pObj[id]); }
+const pKey = makeKey(); pKey.userData.noun = 'key'; past.add(pKey);
+const butler = makeButler(); past.add(butler);
+const reel2Past = makeReel(); reel2Past.position.set(1.4,1.0,0.3); past.add(reel2Past);
+const portraitPv = picture(past, 0.6,0.78, HX,1.425, portraitTex('lord'));                   // 老爷的画像，挂在藏钥匙的那块墙板前面
+picture(past, 0.6,0.78, -HX,1.425, portraitTex('lady'));
+picture(past, 0.4,0.4, -4 + PW/2,1.425, 0xb8c4cc);
+const LIE_Y = { kettle:0.15, vase:0.15, book:0.12 };
+const POSE = { stand:[0,0,0], look:[0.55,0,0.04], place:[1.15,0.4,0.14], fill:[1.25,1.0,0.22], pour:[1.5,1.2,0.3], reach:[1.35,0.9,0.3], recoil:[2.5,0.7,-0.22], hold:[1.95,0,0], hide:[1.5,0,0.16] };
+const WALK = [0.12,0.12,0.04], CARRY = [1.05,1.05,0.06];
+
+// rig = 一帧里所有东西的摆法。帧与帧之间的那一小段放映，就是两个 rig 之间的过渡。
+function rigOf(s){
+  const sp = spot(s.butler.at), p = POSE[s.butler.pose];
+  const r = { b:{ x:sp.stand[0], z:sp.stand[1], yaw:Math.atan2(sp.look[0] - sp.stand[0], sp.look[1] - sp.stand[1]), R:p[0], L:p[1], lean:p[2] }, o:{}, fire:s.fire ? 1 : 0, open:s.open ? 1 : 0, key:s.key.at };
+  for (const id of OBJ){ const o = s[id], q = PLACES[o.at].slots[Math.min(o.slot, 2)]; r.o[id] = { x:q[0], y:q[1], z:q[2], lie:o.at === 'fire' ? 1 : 0, on:o.gone ? 0 : 1, fill:o.filled ? 1 : 0 }; }
+  r.reel2 = !OBJ.some(k => !s[k].gone && s[k].at === 'pedestal' && s[k].slot === 0);        // 花瓶台顶上没东西压着，底下的东西就露出来
+  return r;
+}
+let fireLevel = 1;
+function syncFire(t){
+  const fl = fireLevel * (1 + (flare > 0 ? 0.7 * Math.sin(Math.PI * (1 - flare / 0.8)) : 0));
+  fire.flames.visible = fireLevel > 0.03; fire.flames.scale.set(1, Math.max(0.05, fl * (0.93 + 0.07 * Math.sin(t * 0.021))), 1);
+  fire.light.intensity = FIRE_I * fl * (0.9 + 0.1 * Math.sin(t * 0.013) * Math.sin(t * 0.007)); pastHemi.intensity = lerp(HEMI_OUT, HEMI_LIT, fireLevel);
+}
+function applyRig(r){
+  butler.position.set(r.b.x, 0, r.b.z); butler.rotation.y = r.b.yaw;
+  butler.userData.armR.rotation.x = -r.b.R; butler.userData.armL.rotation.x = -r.b.L; butler.userData.torso.rotation.x = r.b.lean;
+  for (const id of OBJ){ const o = r.o[id], m = pObj[id]; m.visible = o.on > 0.5; m.position.set(o.x, o.y + o.lie * LIE_Y[id], o.z); m.rotation.z = o.lie * Math.PI/2; }
+  pObj.kettle.userData.water.visible = r.o.kettle.fill > 0.5;
+  fireLevel = r.fire; syncFire(performance.now());
+  portraitPv.rotation.y = -2.3 * r.open; pastR.hollow.rotation.y = 1.7 * r.open;
+  pKey.userData.mat.emissive.setHex(r.key === 'fire' && r.fire > 0.5 ? 0xff7a10 : 0x000000);
+  if (r.key === 'fire'){ pKey.position.set(0.05,0.13,-3.12); pKey.rotation.set(-Math.PI/2,0,0.4); }
+  else if (r.key === 'butler'){ butler.updateMatrixWorld(true); butler.userData.armR.userData.hand.getWorldPosition(pKey.position); pKey.position.y += 0.08; pKey.rotation.set(0, r.b.yaw, Math.PI/2); }
+  else { pKey.position.set(HX,1.45,-3.474); pKey.rotation.set(0,0,-Math.PI/2); }
+  reel2Past.visible = r.reel2;
+}
+function mixRig(A, B, u, plan){
+  const s = plan.via ? 0.42 : 0, R = { b:{}, o:{}, key:u < (plan.keyAt ?? 0.86) ? A.key : B.key };
+  let x0 = A.b.x, z0 = A.b.z, x1 = B.b.x, z1 = B.b.z, t = u, first = false;                  // 管家先走到东西那里（via），再走到目的地
+  if (plan.via){ if (u < s){ x1 = plan.via[0]; z1 = plan.via[1]; t = u / s; first = true; } else { x0 = plan.via[0]; z0 = plan.via[1]; t = (u - s) / (1 - s); } }
+  const k = sstep(t, 0, first ? 1 : 0.85);
+  R.b.x = lerp(x0,x1,k); R.b.z = lerp(z0,z1,k);
+  const travel = Math.hypot(x1 - x0, z1 - z0) > 0.05 ? Math.atan2(x1 - x0, z1 - z0) : B.b.yaw;
+  const out = first || !plan.via ? lerpAng(A.b.yaw, travel, sstep(t,0,0.2)) : travel;
+  R.b.yaw = first ? out : lerpAng(out, B.b.yaw, sstep(t,0.7,0.9));
+  const carrying = plan.carry && u >= s, base = plan.base || (carrying ? CARRY : WALK), kin = sstep(u,0,0.12), kout = sstep(u,0.84,1);
+  ['R','L','lean'].forEach((key,i) => { R.b[key] = lerp(lerp(A.b[key], base[i], kin), B.b[key], kout); });
+  const tc = u < s ? 0 : sstep((u - s) / (1 - s), 0, 0.85);
+  for (const id of OBJ){ const a = A.o[id], b = B.o[id], on = u < 0.86 ? a.on : b.on, fill = u < 0.86 ? a.fill : b.fill;
+    R.o[id] = id === plan.carry
+      ? { x:lerp(a.x,b.x,tc), z:lerp(a.z,b.z,tc), y:lerp(a.y,b.y,tc) + Math.sin(Math.PI*tc) * Math.max(0.12, 1.05 - (a.y + b.y)/2), lie:lerp(a.lie,b.lie,sstep(tc,0.8,1)), on, fill }
+      : { ...b, on, fill }; }
+  R.fire = lerp(A.fire, B.fire, sstep(u,0.84,0.97)); R.open = lerp(A.open, B.open, sstep(u,0.5,0.88));
+  R.reel2 = carrying ? B.reel2 : A.reel2;
+  return R;
+}
+let tween = null, flare = 0;
+function startTween(A, B, plan, dur, fx, done){ tween = { A, B, plan, dur, fx, done, t:0, fxDone:false }; }
+function runTween(dt){
+  const w = tween; w.t += dt; const u = Math.min(1, w.t / w.dur);
+  applyRig(mixRig(w.A, w.B, u, w.plan));
+  if (!w.fxDone && u >= 0.86){ w.fxDone = true; if (w.fx === 'steam') puff(); if (w.fx === 'flare'){ flare = 0.8; snd('steam'); } }
+  if (w.t >= w.dur + 0.9){ tween = null; applyRig(w.B); w.done(); }
+}
+const steam = [];
+function puff(){
+  for (let i = 0; i < 14; i++){ const m = noRay(new THREE.Mesh(new THREE.SphereGeometry(0.12,8,6), new THREE.MeshBasicMaterial({ color:0xe8e4da, transparent:true, opacity:.7, depthWrite:false })));
+    m.position.set((Math.random() - .5) * 0.9, 0.2 + Math.random() * 0.3, -3.15 + Math.random() * 0.3); past.add(m); steam.push({ m, t:0, life:1.4 + Math.random() * 0.9, vy:0.5 + Math.random() * 0.6 }); }
+  snd('steam');
+}
+const anims = [];
+function anim(dur, fn, done){ anims.push({ t:0, dur, fn, done }); }
+function wiggle(o, ax = 'z', amp = 0.03){ const b = o.rotation[ax]; anim(0.3, u => { o.rotation[ax] = b + Math.sin(u * Math.PI * 4) * amp * (1 - u); }); }
+
+/* ---------- 声音（占位） ---------- */
+let AC = null;
+function snd(kind){ try {
+  AC = AC || new (window.AudioContext || window.webkitAudioContext)(); const t = AC.currentTime;
+  const tone = (f, d, type = 'sine', v = 0.2, f2) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = type; o.frequency.setValueAtTime(f,t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + d);
+    g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d); };
+  const noise = (d, v = 0.2) => { const n = Math.floor(AC.sampleRate * d), b = AC.createBuffer(1,n,AC.sampleRate), a = b.getChannelData(0); for (let i = 0; i < n; i++) a[i] = (Math.random()*2 - 1) * (1 - i/n);
+    const s = AC.createBufferSource(), g = AC.createGain(); g.gain.value = v; s.buffer = b; s.connect(g).connect(AC.destination); s.start(t); };
+  ({ shutter:() => { noise(0.07,0.25); tone(900,0.04,'square',0.05); }, tick:() => noise(0.02,0.12), paste:() => noise(0.04,0.15),
+     dev:() => { for (let i = 0; i < 9; i++) setTimeout(() => snd('tick'), i * 90); }, thud:() => tone(90,0.16,'sine',0.4,50),
+     hollow:() => { tone(190,0.32,'sine',0.35,120); noise(0.05,0.1); }, rattle:() => { noise(0.08,0.2); setTimeout(() => snd('tick'), 90); },
+     get:() => tone(660,0.18,'triangle',0.15,990), open:() => tone(140,0.7,'sawtooth',0.07,70), steam:() => noise(0.9,0.16), no:() => tone(160,0.1,'square',0.04) })[kind]?.();
+} catch {} }
+
+/* ---------- 状态 ---------- */
+const film = { owned:false, entered:false, tail:false, view:0, pending:null, frames:[{ state:clone(S0), cap:'炉火。火里有一把钥匙。管家进来了。', paste:null, thumb:null }] };
+const cuts = {};                                           // 剪片：名词 → { img, era }
+const n = { photo:0, dev:0, peel:0, stuck:0, step:0, filmOpen:0, enter:0, use:0, doorTry:0, knockWrong:0, knockRight:0, sawReel2:false, reel2:false };
+const LOG = [], T = {};
+let t0 = performance.now(), started = new Date().toISOString();
+let mode = 'start', era = 'now', locked = false, held = null, finished = false;
+const player = { x:0, z:2.4, yaw:0, pitch:-0.04 };
+const elapsed = () => +((performance.now() - t0) / 1000).toFixed(1);
+const log = e => { LOG.push({ t:elapsed(), ...e }); if ($('#debug').classList.contains('show')) renderDebug(); };
+const last = () => film.frames[film.frames.length - 1];
+const pastes = () => film.frames.filter(f => f.paste).length;
+const stuck = () => !film.tail && pastes() >= MAX_PASTE;
+const canPaste = () => !film.tail && !stuck();
+const route = () => film.frames.filter(f => f.paste).map(f => `${NOUN[f.paste.noun]}→${PLACES[f.paste.place].name}`).join('，');
+
+/* ---------- 界面 ---------- */
+let capTimer = 0, toastTimer = 0;
+function setCap(txt, secs = 5){ const c = $('#cap'); clearTimeout(capTimer); c.textContent = txt; c.classList.toggle('on', !!txt); if (txt) capTimer = setTimeout(() => c.classList.remove('on'), secs * 1000); }
+function toast(txt, secs = 3){ const c = $('#toast'); clearTimeout(toastTimer); c.textContent = txt; c.classList.add('on'); toastTimer = setTimeout(() => c.classList.remove('on'), secs * 1000); }
+function flick(o = 0.5, ms = 260){ const f = $('#flash'); f.style.transition = 'none'; f.style.opacity = o; void f.offsetWidth; f.style.transition = `opacity ${ms}ms`; f.style.opacity = 0; }
+const cardImg = k => cuts[k] && cuts[k].img ? `<img class="${cuts[k].era}" src="${cuts[k].img}" alt="">` : '<i class="sw"></i>';
+function cells(){
+  const out = film.frames.map((f,i) => ({ kind:f.tail ? 'tail' : 'dev', i, f }));
+  if (!film.tail){ for (let k = pastes(); k < MAX_PASTE; k++) out.push({ kind:k === pastes() ? 'next' : 'blank' }); out.push({ kind:'torn' }); }
+  return out;
+}
+function cellHTML(c, mini){
+  if (c.kind === 'dev' || c.kind === 'tail'){ const f = c.f;
+    return `<div class="fcell ${c.kind} ${c.i === film.view ? 'cur' : ''}"><div class="im">${f.thumb ? `<img src="${f.thumb}" alt="">` : ''}<span class="num">${c.kind === 'tail' ? '片尾' : c.i + 1}</span></div>`
+      + (mini ? '' : `<p>${f.paste ? `<em>${NOUN[f.paste.noun]} → ${PLACES[f.paste.place].name}</em><br>` : ''}${f.cap}</p>`) + '</div>'; }
+  if (c.kind === 'next') return `<div class="fcell next"><div class="im">?</div>${mini ? '' : '<p>接下来发生了什么？</p>'}</div>`;
+  if (c.kind === 'blank') return `<div class="fcell blank"><div class="im"></div>${mini ? '' : '<p></p>'}</div>`;
+  return `<div class="fcell torn"><div class="im">片尾</div>${mini ? '' : `<p>${stuck() ? '接不上。' : ''}</p>`}</div>`;
+}
+function hud(){
+  canvas.className = era;
+  $('#era').textContent = era === 'now' ? '现在 · 书房' : `过去 · ${film.frames[film.view].tail ? '片尾' : `第 ${film.view + 1} 帧`}`;
+  $('#legend').innerHTML = era === 'now' ? `WASD 走　鼠标 看　左键 拍照　E 使用${film.owned ? '　<kbd>F</kbd>举起胶卷' : ''}` : 'WASD 走　左键 拍照　<kbd>F</kbd>举起胶卷　Q / E 翻帧';
+  $('#strip').style.display = film.owned ? 'flex' : 'none';
+  $('#strip').innerHTML = cells().map(c => cellHTML(c, true)).join('');
+  $('#cuts').innerHTML = Object.keys(NOUN).filter(k => cuts[k]).map(k => `<div class="card mini">${cardImg(k)}<span>${NOUN[k]}</span></div>`).join('');
+}
+function renderFilm(){
+  const can = canPaste(), pd = film.pending, owned = Object.keys(NOUN).filter(k => cuts[k]);
+  $('#fstrip').innerHTML = cells().map(c => cellHTML(c, false)).join('');
+  $('#fghost').src = last().thumb || '';
+  $('#fframe').classList.toggle('ghosted', can);
+  $('#fanchors').innerHTML = can ? Object.entries(PLACES).map(([id,p]) => `<i class="anc" data-pl="${id}" style="left:${UV[id].x * 100}%;top:${UV[id].y * 100}%"><b>${p.name}</b></i>`).join('') : '';
+  $('#fpaste').innerHTML = pd ? `<div class="pasted" style="left:${UV[pd.place].x * 100}%;top:${UV[pd.place].y * 100}%" title="点一下撕掉"><div class="card">${cardImg(pd.noun)}<span>${NOUN[pd.noun]}</span></div></div>` : '';
+  $('#ftray').innerHTML = owned.length ? owned.map(k => `<button class="cut card ${held === k ? 'held' : ''}" data-cut="${k}">${cardImg(k)}<span>${NOUN[k]}</span></button>`).join('') : '<p class="hint">还没有剪片。放下胶卷，去拍几张。</p>';
+  $('#fq').textContent = film.tail ? '这卷放完了。' : stuck() ? '片尾接不上。' : `第 ${film.frames.length + 1} 帧：接下来发生了什么？`;
+  $('#fhint').textContent = can ? '把剪片拖到画面里。贴在哪里，下一帧它就在哪里。' : film.tail ? '想换一种讲法，就撕掉重贴。' : '撕掉一帧，换一种讲法。';
+  $('#bDev').disabled = !pd; $('#bPeel').disabled = film.frames.length <= 1;
+  $('#film').classList.toggle('holding', !!held);
+}
+function showPause(on){ $('#pauseGo').textContent = mode === 'start' ? '点击开始' : '点击继续'; $('#pause').classList.toggle('show', on); }
+function lock(){ if (NOLOCK) return; try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => { if (mode === 'walk') showPause(true); }); } catch { showPause(true); } }
+
+/* ---------- 胶卷：进出、翻帧、贴、显影、撕 ---------- */
+const snapC = document.createElement('canvas'); snapC.width = 960; snapC.height = 540;
+function snap(i){                                          // 从摄影机的位置把当前这一帧拍下来，当作胶卷上的画面
+  const a = filmCam.aspect; filmAspect(16/9); renderer.render(scene, filmCam);
+  snapC.getContext('2d').drawImage(renderer.domElement, 0,0,960,540);
+  film.frames[i].thumb = snapC.toDataURL('image/jpeg', 0.8); filmAspect(a);
+}
+function setEra(e){ era = e; now.visible = e === 'now'; past.visible = e === 'past'; hud(); }
+function enterPast(){
+  if (!film.owned || mode !== 'walk') return;
+  setEra('past'); film.view = film.frames.length - 1; applyRig(rigOf(last().state));
+  film.frames.forEach((f,i) => { if (!f.thumb && i === film.view) snap(i); });
+  flick(1, 900); snd('dev'); n.enter++; log({ ev:'enter' }); hud();
+  if (!film.entered){ film.entered = true; T.past = elapsed(); toast('胶卷的第 1 帧。接下来发生了什么？', 6); }
+  setCap(last().cap, 5);
+}
+function leavePast(){
+  if (era !== 'past' || (mode !== 'film' && mode !== 'walk')) return;
+  $('#film').classList.remove('show'); mode = 'walk'; held = null; film.pending = null;
+  setEra('now'); flick(1, 900); setCap(''); log({ ev:'leave', done:film.tail }); lock();
+}
+function stepFrame(d){
+  const v = clamp(film.view + d, 0, film.frames.length - 1);
+  if (v === film.view){ snd('no'); return; }
+  film.view = v; applyRig(rigOf(film.frames[v].state)); flick(0.35, 200); snd('tick'); setCap(film.frames[v].cap, 4); n.step++; log({ ev:'step', f:v + 1 }); hud();
+}
+function openFilm(){
+  if (mode !== 'walk' || era !== 'past') return;
+  if (film.view !== film.frames.length - 1){ film.view = film.frames.length - 1; applyRig(rigOf(last().state)); }
+  mode = 'film'; n.filmOpen++; log({ ev:'film-open' }); setCap('');
+  if (document.pointerLockElement) document.exitPointerLock();
+  renderFilm(); $('#film').classList.add('show');
+}
+function closeFilm(){ if (mode !== 'film') return; $('#film').classList.remove('show'); mode = 'walk'; held = null; hud(); lock(); }
+function setPending(noun, place){ film.pending = { noun, place }; snd('paste'); log({ ev:'paste', f:film.frames.length + 1, noun, place }); renderFilm(); }
+function peel(){
+  if (mode !== 'film' || film.frames.length <= 1) return;
+  if (film.tail){ film.frames.pop(); film.tail = false; }
+  const f = film.frames.pop(); film.pending = null; film.view = film.frames.length - 1; n.peel++;
+  log({ ev:'peel', noun:f.paste.noun, place:f.paste.place }); snd('paste'); applyRig(rigOf(last().state)); renderFilm(); hud();
+}
+function develop(){
+  if (mode !== 'film' || !film.pending || !canPaste()) return;
+  const p = film.pending, A = last().state, r = resolve(A, p.noun, p.place), i = film.frames.length;
+  film.pending = null; held = null;
+  film.frames.push({ state:r.state, cap:r.cap, paste:p, thumb:null }); film.view = i; n.dev++;
+  if (rigOf(r.state).reel2) n.sawReel2 = true;
+  log({ ev:'develop', f:i + 1, noun:p.noun, place:p.place, cap:r.cap });
+  $('#film').classList.remove('show'); $('#gate').classList.add('on'); mode = 'developing'; filmAspect(innerWidth / innerHeight); lock(); snd('dev'); setCap(r.cap, 8); hud();
+  startTween(rigOf(A), rigOf(r.state), r.plan, r.plan.via ? 2.6 : 1.8, r.fx, () => {
+    snap(i);
+    if (r.state.key.at === 'butler'){                      // 管家拿到钥匙：片尾自己接上
+      const Tl = tailState(r.state); film.frames.push({ state:Tl, cap:TAIL_CAP, tail:true, thumb:null }); film.tail = true; film.view = i + 1;
+      T.tail = elapsed(); log({ ev:'tail', route:route() }); snd('dev'); setCap(TAIL_CAP, 8); hud();
+      startTween(rigOf(r.state), rigOf(Tl), { via:null, carry:null, base:POSE.hold }, 2.8, null, () => { snap(i + 1); endDev(); toast('胶卷到头了。', 4); });
+    } else { endDev(); if (stuck()){ n.stuck++; log({ ev:'stuck', route:route() }); toast('片尾接不上。', 4); } }
+  });
+}
+function endDev(){ $('#gate').classList.remove('on'); mode = 'walk'; flick(0.5, 300); hud(); if (!locked && !NOLOCK) showPause(true); }
+
+/* ---------- 瞄准、拍照、使用 ---------- */
+const ray = new THREE.Raycaster(); ray.far = 9; const C0 = new THREE.Vector2(0,0);
+const USE_LABEL = { door:'开门', reel:'拿起', reel2:'拿起', nowkey:'拿起', panel:'敲一下', vase:'碰一下', junk:'碰一下' };
+const shown = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+let aim = null, promptStr = '';
+function updateAim(){
+  camera.updateMatrixWorld(); ray.setFromCamera(C0, camera); aim = null;
+  for (const h of ray.intersectObjects([shell, era === 'now' ? now : past], true)){
+    if (!shown(h.object)) continue;
+    let noun = null, use = null, holder = null;
+    for (let p = h.object; p; p = p.parent){ if (!noun && p.userData.noun) noun = p.userData.noun; if (!use && p.userData.use){ use = p.userData.use; holder = p; } }
+    aim = { obj:holder || h.object, noun, use, dist:h.distance }; break;
+  }
+  const L = [];
+  if (aim && era === 'now' && aim.use && aim.dist < 2.5) L.push(`<kbd>E</kbd>${USE_LABEL[aim.use]}`);
+  if (aim && aim.noun) L.push(`<kbd>左键</kbd>拍下〔${NOUN[aim.noun]}〕`);
+  const s = L.join('　　');
+  if (s !== promptStr){ promptStr = s; $('#prompt').innerHTML = s; $('#cross').classList.toggle('hot', !!s); }
+}
+let shotReq = null;
+const photoC = document.createElement('canvas'); photoC.width = photoC.height = 128;
+function shoot(){ snd('shutter'); flick(0.6, 180); n.photo++; if (aim && aim.noun) shotReq = { noun:aim.noun, era }; else log({ ev:'photo', noun:null, era }); }
+function takeShot(){                                       // 刚渲染完就把准星周围那一块剪下来，剪片就是这张照片
+  const { noun } = shotReq; shotReq = null; const d = renderer.domElement, s = Math.round(d.height * 0.42);
+  photoC.getContext('2d').drawImage(d, (d.width - s)/2, (d.height - s)/2, s, s, 0,0,128,128);
+  const fresh = !cuts[noun]; cuts[noun] = { img:photoC.toDataURL('image/jpeg', 0.82), era };
+  log({ ev:'photo', noun, era, fresh }); toast(fresh ? `剪下了〔${NOUN[noun]}〕` : `重拍了〔${NOUN[noun]}〕`, 2); hud();
+}
+function doUse(){
+  const a = aim; if (!a || !a.use || a.dist >= 2.5) return; const o = a.obj; n.use++;
+  switch (a.use){
+    case 'door':
+      if (hand.key){ hand.key = false; handKey.visible = false; finished = true; T.door = elapsed(); snd('open'); log({ ev:'door', ok:true }); nowR.doorLight.visible = true;
+        anim(1.3, u => { nowR.doorPivot.rotation.y = 1.25 * sstep(u); }, () => setTimeout(showEnd, 600)); }
+      else { n.doorTry++; snd('rattle'); wiggle(nowR.doorPivot, 'y', 0.02); toast('锁着。'); log({ ev:'door', ok:false }); }
+      break;
+    case 'reel': o.visible = false; film.owned = true; snd('get'); toast('一卷胶卷：书房，某个傍晚。', 4); log({ ev:'reel' }); hud(); break;
+    case 'panel':
+      if (!o.userData.hollow){ n.knockWrong++; snd('thud'); wiggle(o, 'z', 0.012); log({ ev:'panel', ok:false }); }
+      else if (!nowS.open){ nowS.open = true; n.knockRight++; snd('hollow'); nowR.cavKey.visible = true; log({ ev:'panel', ok:true, wrongBefore:n.knockWrong, filmDone:film.tail });
+        anim(0.7, u => { nowR.hollow.rotation.y = 1.7 * sstep(u); }); }
+      break;
+    case 'nowkey': o.visible = false; hand.key = true; handKey.visible = true; snd('get'); toast('钥匙。'); log({ ev:'key' }); break;
+    case 'vase':
+      if (nowS.vase){ snd('tick'); wiggle(o, 'z', 0.03); break; }
+      nowS.vase = true; nowR.reel2.visible = true; snd('tick'); log({ ev:'vase', sawInFilm:n.sawReel2 });
+      anim(0.8, u => { const t = sstep(u); o.position.set(lerp(1.4,1.95,t), lerp(1.0,0,t) + Math.sin(Math.PI*t) * 0.25, 0.3); });
+      break;
+    case 'reel2': o.visible = false; n.reel2 = true; snd('get'); toast('第二卷胶卷。（这个原型里没有它的内容）', 5); log({ ev:'reel2', sawInFilm:n.sawReel2 }); break;
+    default: snd('tick'); wiggle(o, 'z', 0.03); log({ ev:'touch' });
+  }
+}
+
+/* ---------- 结束与调试 ---------- */
+function showEnd(){
+  mode = 'end'; if (document.pointerLockElement) document.exitPointerLock(); $('#pause').classList.remove('show');
+  $('#stats').innerHTML = [
+    ['总用时', (T.door ?? elapsed()) + ' 秒'], ['胶卷里的讲法', route() || '—'], ['拍照', n.photo + ' 次'], ['显影', n.dev + ' 帧'], ['撕掉', n.peel + ' 帧'],
+    ['片尾接不上', n.stuck + ' 次'], ['举起胶卷', n.filmOpen + ' 次'], ['回看翻帧', n.step + ' 次'], ['敲错墙板', n.knockWrong + ' 块'], ['第二卷胶卷', n.reel2 ? '找到了' : '没找到'],
+  ].map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
+  $('#end').classList.add('show');
+}
+const exportLog = () => JSON.stringify({ proto:'next-frame', frames:MAX_PASTE, started, seconds:elapsed(), finished, times:T, route:route(), counts:n, log:LOG }, null, 1);
+async function copyLog(btn){
+  const txt = exportLog();
+  try { await navigator.clipboard.writeText(txt); btn.textContent = '已复制'; }
+  catch { const ta = $('#logdump'); ta.hidden = false; ta.value = txt; $('#end').classList.add('show'); ta.select(); btn.textContent = '已选中，请手动复制'; }
+}
+function renderDebug(){
+  $('#answers').textContent = `空帧：${MAX_PASTE}\n明面上的解：水壶→水盆，水壶→壁炉，管家→壁炉\n另一种解：花瓶→壁炉，管家→壁炉（顺带露出花瓶台里的第二卷）\n片尾：钥匙在左边那幅画像后面的墙板里\n现在的讲法：${route() || '（还没贴）'}`;
+  $('#logtail').textContent = LOG.slice(-14).map(e => `${e.t.toFixed(1)}s  ${e.ev}${e.f ? ' 帧' + e.f : ''}${e.noun ? ' ' + NOUN[e.noun] : ''}${e.place ? '→' + PLACES[e.place].name : ''}${e.ok === undefined ? '' : e.ok ? ' ✓' : ' ✗'}`).join('\n') || '还没有操作';
+}
+function toggleDebug(force){
+  const on = force ?? !$('#debug').classList.contains('show'); $('#debug').classList.toggle('show', on);
+  if (on){ renderDebug(); if (document.pointerLockElement) document.exitPointerLock(); }
+}
+function give(){ for (const k in NOUN) cuts[k] = cuts[k] || { img:null, era:'past' }; hud(); if (mode === 'film') renderFilm(); }
+function jumpPast(){ film.owned = true; nowR.reel.visible = false; if (mode === 'start') mode = 'walk'; if (mode === 'walk' && era !== 'past') enterPast(); }
+function solve(){                                          // 调试用：按明面上的解直接推完
+  give(); film.owned = true; nowR.reel.visible = false; if (mode === 'start' || mode === 'film'){ $('#film').classList.remove('show'); mode = 'walk'; }
+  if (mode !== 'walk') return;
+  setEra('past'); film.frames.length = 1; film.tail = false; film.pending = null; film.entered = true;
+  applyRig(rigOf(film.frames[0].state)); if (!film.frames[0].thumb) snap(0);
+  for (const [noun,place] of [['kettle','basin'],['kettle','fire'],['butler','fire']]){ const r = resolve(last().state, noun, place); film.frames.push({ state:r.state, cap:r.cap, paste:{ noun, place }, thumb:null }); applyRig(rigOf(r.state)); snap(film.frames.length - 1); }
+  film.frames.push({ state:tailState(last().state), cap:TAIL_CAP, tail:true, thumb:null }); film.tail = true; film.view = film.frames.length - 1;
+  applyRig(rigOf(last().state)); snap(film.view); log({ ev:'debug-solve' }); hud();
+}
+
+/* ---------- 输入 ---------- */
+const keys = {};
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'TEXTAREA') return;
+  keys[e.code] = true; if (e.repeat) return;
+  if (e.code === 'Backquote' || e.key === '`' || e.key === '·'){ toggleDebug(); return; }
+  if (mode === 'walk'){
+    if (e.code === 'KeyF'){ e.preventDefault(); if (era === 'past') openFilm(); else enterPast(); }
+    else if (e.code === 'KeyE'){ if (era === 'past') stepFrame(1); else doUse(); }
+    else if (e.code === 'KeyQ' && era === 'past') stepFrame(-1);
+  } else if (mode === 'film'){
+    if (e.code === 'KeyF' || e.code === 'Escape'){ e.preventDefault(); closeFilm(); }
+    else if (e.code === 'Enter') develop();
+    else if (e.code === 'KeyX') peel();
+    else if (e.code === 'KeyR') leavePast();
+  }
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+canvas.addEventListener('mousedown', e => { if (mode !== 'walk' || e.button !== 0) return; if (!locked && !NOLOCK){ lock(); return; } shoot(); });
+document.addEventListener('mousemove', e => { if (locked && mode === 'walk'){ player.yaw -= e.movementX * 0.0022; player.pitch = clamp(player.pitch - e.movementY * 0.0022, -1.45, 1.45); } });
+document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; if (locked) showPause(false); else if (mode === 'walk' && !NOLOCK) showPause(true); });
+$('#pause').addEventListener('click', () => { if (mode === 'start'){ mode = 'walk'; t0 = performance.now(); started = new Date().toISOString(); log({ ev:'start' }); } if (NOLOCK) showPause(false); else lock(); });
+
+// 贴：把剪片拖到画面上；或者点一下剪片拿在手里，再点画面
+let drag = null; const ghost = $('#ghost');
+function nearestPlace(cx, cy, frac){
+  const r = $('#fframe').getBoundingClientRect(); let best = null, bd = Infinity;
+  for (const id in UV){ const d = Math.hypot(r.left + UV[id].x * r.width - cx, r.top + UV[id].y * r.height - cy); if (d < bd){ bd = d; best = id; } }
+  return bd <= frac * r.width ? best : null;
+}
+function markNear(cx, cy){ const pl = cx === undefined ? null : nearestPlace(cx, cy, 0.13); document.querySelectorAll('.anc').forEach(a => a.classList.toggle('near', a.dataset.pl === pl)); }
+function endDrag(){ drag = null; ghost.style.display = 'none'; $('#film').classList.remove('dragging'); markNear(); }
+$('#ftray').addEventListener('pointerdown', e => { const b = e.target.closest('.cut'); if (!b || !canPaste()) return; e.preventDefault(); drag = { id:b.dataset.cut, x:e.clientX, y:e.clientY, moved:false }; });
+addEventListener('pointermove', e => {
+  if (drag){
+    if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 6){ drag.moved = true; ghost.innerHTML = `${cardImg(drag.id)}<span>${NOUN[drag.id]}</span>`; ghost.style.display = 'flex'; $('#film').classList.add('dragging'); }
+    if (drag.moved){ ghost.style.left = e.clientX + 'px'; ghost.style.top = e.clientY + 'px'; markNear(e.clientX, e.clientY); }
+  } else if (held && mode === 'film') markNear(e.clientX, e.clientY);
+});
+addEventListener('pointerup', e => {
+  if (!drag) return;
+  const { id, moved } = drag; endDrag();
+  if (!moved){ held = held === id ? null : id; renderFilm(); return; }
+  held = null; const pl = nearestPlace(e.clientX, e.clientY, 0.13);
+  if (pl) setPending(id, pl); else renderFilm();
+});
+addEventListener('pointercancel', endDrag);
+$('#ftray').addEventListener('click', e => { const b = e.target.closest('.cut'); if (!b || e.detail !== 0 || !canPaste()) return; held = held === b.dataset.cut ? null : b.dataset.cut; renderFilm(); });   // 键盘回车
+$('#fframe').addEventListener('click', e => {
+  if (held){ const id = held, pl = nearestPlace(e.clientX, e.clientY, 0.2); held = null; if (pl && canPaste()) setPending(id, pl); else renderFilm(); }
+  else if (e.target.closest('.pasted')){ log({ ev:'unpaste', ...film.pending }); film.pending = null; renderFilm(); }
+});
+$('#bDev').addEventListener('click', develop);
+$('#bPeel').addEventListener('click', peel);
+$('#bDown').addEventListener('click', closeFilm);
+$('#bNow').addEventListener('click', leavePast);
+$('#copyLog').addEventListener('click', e => copyLog(e.currentTarget));
+$('#again').addEventListener('click', () => location.reload());
+$('#stay').addEventListener('click', () => { $('#end').classList.remove('show'); mode = 'walk'; if (NOLOCK) showPause(false); else lock(); });
+$('#dbgReset').addEventListener('click', () => location.reload());
+$('#dbgGive').addEventListener('click', give);
+$('#dbgPast').addEventListener('click', jumpPast);
+$('#dbgSolve').addEventListener('click', solve);
+$('#dbgCopy').addEventListener('click', e => copyLog(e.currentTarget));
+$('#dbgClose').addEventListener('click', () => toggleDebug(false));
+
+/* ---------- 每一帧 ---------- */
+function movePlayer(dt){
+  if (keys.ArrowLeft) player.yaw += 1.9 * dt; if (keys.ArrowRight) player.yaw -= 1.9 * dt;
+  if (keys.ArrowUp) player.pitch = Math.min(1.45, player.pitch + 1.3 * dt); if (keys.ArrowDown) player.pitch = Math.max(-1.45, player.pitch - 1.3 * dt);
+  let fx = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0), fz = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0);
+  if (fx || fz){ const l = Math.hypot(fx,fz), sp = (keys.ShiftLeft ? 4.4 : 2.7) * dt / l, s = Math.sin(player.yaw), c = Math.cos(player.yaw);
+    player.x += (-s * fz + c * fx) * sp; player.z += (-c * fz - s * fx) * sp; }
+  const r = 0.3; player.x = clamp(player.x, -4 + r, 4 - r); player.z = clamp(player.z, -3.5 + r, 3.5 - r);
+  for (const [x0,x1,z0,z1] of OBS){
+    if (player.x <= x0 - r || player.x >= x1 + r || player.z <= z0 - r || player.z >= z1 + r) continue;
+    const d = [player.x - (x0 - r), (x1 + r) - player.x, player.z - (z0 - r), (z1 + r) - player.z], m = Math.min(...d);
+    if (m === d[0]) player.x = x0 - r; else if (m === d[1]) player.x = x1 + r; else if (m === d[2]) player.z = z0 - r; else player.z = z1 + r;
+  }
+}
+function resize(){ renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); if (mode === 'developing') filmAspect(innerWidth / innerHeight); }
+addEventListener('resize', resize); resize();
+let prev = performance.now();
+function tick(t){
+  const dt = Math.min(0.05, (t - prev) / 1000); prev = t;
+  if (mode === 'walk') movePlayer(dt);
+  for (let i = anims.length - 1; i >= 0; i--){ const a = anims[i]; a.t += dt; a.fn(Math.min(1, a.t / a.dur)); if (a.t >= a.dur){ anims.splice(i,1); a.done && a.done(); } }
+  if (tween) runTween(dt);
+  for (let i = steam.length - 1; i >= 0; i--){ const p = steam[i]; p.t += dt; p.m.position.y += p.vy * dt; p.m.scale.setScalar(1 + p.t * 1.6); p.m.material.opacity = 0.7 * (1 - p.t / p.life); if (p.t >= p.life){ past.remove(p.m); steam.splice(i,1); } }
+  flare = Math.max(0, flare - dt); syncFire(t);
+  camera.position.set(player.x, EYE, player.z); camera.rotation.set(player.pitch, player.yaw, 0);
+  if (mode === 'walk') updateAim(); else if (promptStr){ promptStr = ''; $('#prompt').innerHTML = ''; $('#cross').classList.remove('hot'); }
+  renderer.render(scene, mode === 'developing' ? filmCam : camera);
+  if (shotReq) takeShot();
+  requestAnimationFrame(tick);
+}
+applyRig(rigOf(S0)); hud(); requestAnimationFrame(tick);
+
+// 给调试和自动检查用
+window.H = { film, cuts, n, player, LOG, PLACES, UV, get mode(){ return mode; }, get era(){ return era; }, get aim(){ return aim; }, get tween(){ return !!tween; },
+  nolock(v = true){ NOLOCK = v; if (v) showPause(false); },
+  tp(x, z, yaw = 0, pitch = 0){ player.x = x; player.z = z; player.yaw = yaw; player.pitch = pitch; },
+  paste(noun, place){ film.pending = { noun, place }; if (mode === 'film') renderFilm(); },
+  give, solve, jumpPast, enterPast, leavePast, openFilm, closeFilm, develop, peel, stepFrame, resolve, doUse, shoot, showEnd, toggleDebug };
+</script>
+</body>
+</html>

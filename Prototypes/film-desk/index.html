@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>胶卷台 · Heritage 原型 1</title>
+<!--
+  Heritage 玩具原型 1：胶卷台
+  问题（A 对 B）：把剪下来的照片贴进破损的帧，能不能让人真的去推理？
+      A = 贴对一处立刻显影；B = 贴对三处才一起显影。
+  动词：看（逐帧对照）、贴、撕下重贴。
+  想要的体验：对照几帧之后"我想明白了"，而不是把十张剪片挨个试一遍。
+  媒介：单文件 2D 网页（SVG 灰盒）。测的是规则和界面，不需要 3D。
+  用法：直接打开本文件。默认规则 A；网址后加 ?rule=b 或 #b 用规则 B；按 D 打开调试面板。
+  结论（2026-11-17，本人试玩一次）：
+    1. "把剪片贴到破损帧上"这个提案成立，有一定乐趣。
+    2. B 好于 A，甚至可以要求一次贴对 4～5 处：显影之前要保留不确定性，否则太简单。
+    3. 实际玩起来是"找不同"：对照前后帧，看哪件东西不在原位，就知道该贴什么。整条推理链只靠观察相邻两帧就能走完。
+    4. 风险：这样做它是一个完全的 2D 游戏，不需要 3D，不适合以 2D 形式放进我们的游戏。
+    5. 风险：只有一个固定答案。希望像 Storyteller 那样给目标、允许多种解，不同的解带来不同的知识（支线），但都能推进进度。
+    下一步方向：贴的过程 3D 化（手里拿着胶卷，贴完看 3D 世界的变化）；多解。
+-->
+<style>
+  :root{ --bg:#14120d; --panel:#1e1b14; --line:#3a3528; --ink:#e9e2cf; --dim:#9b927c; --amber:#e8b24a; --ok:#9fc37a; }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 "PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+  button{ font:inherit; color:inherit; }
+  header{ display:flex; align-items:center; gap:14px; padding:10px 16px; border-bottom:1px solid var(--line); }
+  header h1{ font-size:16px; margin:0; font-weight:600; letter-spacing:.1em; }
+  header .sub{ color:var(--dim); font-size:13px; }
+  .gear{ margin-left:auto; background:none; border:1px solid var(--line); border-radius:4px; padding:3px 10px; color:var(--dim); cursor:pointer; }
+  .gear:hover{ color:var(--ink); border-color:var(--dim); }
+
+  main{ display:grid; grid-template-columns:minmax(0,1fr) 250px; gap:16px; padding:16px; max-width:1320px; margin:0 auto; }
+  .viewer{ width:min(100%, calc((100vh - 300px) * 16 / 9)); min-width:320px; aspect-ratio:16/9; margin:0 auto; background:#000; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .frame{ display:block; width:100%; height:100%; filter:sepia(.3) saturate(.85) contrast(1.04); }
+  .statusbar{ display:grid; grid-template-columns:1fr auto 1fr; align-items:center; color:var(--dim); font-size:13px; padding:8px 2px; }
+  .statusbar #ruleText{ color:var(--ink); }
+  .statusbar #count{ text-align:right; }
+
+  .strip{ position:relative; display:grid; grid-template-columns:repeat(6,1fr); gap:8px; padding:16px 10px; background:#0c0b08; border:1px solid var(--line); border-radius:6px; }
+  .strip::before,.strip::after{ content:""; position:absolute; left:10px; right:10px; height:6px; background:repeating-linear-gradient(90deg,#3a3528 0 10px,transparent 10px 20px); }
+  .strip::before{ top:5px; } .strip::after{ bottom:5px; }
+  .cell{ position:relative; padding:0; border:2px solid transparent; border-radius:4px; background:none; cursor:pointer; overflow:hidden; aspect-ratio:16/9; }
+  .cell.sel{ border-color:var(--amber); }
+  .cell .num{ position:absolute; left:5px; top:2px; font-size:11px; color:#fff; text-shadow:0 1px 2px #000; }
+  .cell.damaged::after,.cell.fixed::after{ content:""; position:absolute; right:5px; top:5px; width:8px; height:8px; border-radius:50%; background:var(--amber); box-shadow:0 0 0 2px #0008; }
+  .cell.fixed::after{ background:var(--ok); }
+
+  .tray{ background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:12px; align-self:start; }
+  .tray h2{ font-size:13px; color:var(--dim); margin:0 0 10px; font-weight:500; letter-spacing:.12em; }
+  .cuts{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+  .cut{ position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 6px 5px; background:#f1ead8; color:#2b2620; border:0; border-radius:3px; cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; box-shadow:0 2px 0 #0009; font-size:13px; transition:transform .12s; }
+  .cut:hover{ transform:translateY(-2px); }
+  .cut svg{ width:54px; height:65px; pointer-events:none; }
+  .cut.held{ outline:3px solid var(--amber); transform:translateY(-3px) rotate(-2deg); }
+  .cut .used{ position:absolute; right:4px; top:2px; font-size:10px; font-style:normal; color:#7a6b45; }
+  .hint{ color:var(--dim); font-size:12px; margin:12px 0 0; }
+
+  .ghost{ position:fixed; z-index:50; pointer-events:none; display:none; width:66px; padding:6px; background:#f1ead8; border-radius:3px; box-shadow:0 10px 24px #000a; transform:translate(-50%,-60%) rotate(-5deg); }
+  .ghost svg{ display:block; width:54px; height:65px; }
+
+  .hit{ cursor:pointer; }
+  body.dragging .patch, body.holding .patch{ animation:pulse 1s ease-in-out infinite; }
+  @keyframes pulse{ 50%{ stroke-width:3.4; stroke:#ffe0a0; } }
+  .shake{ animation:shake .32s linear 2; }
+  @keyframes shake{ 0%,100%{ transform:translateX(0); } 25%{ transform:translateX(-5px); } 75%{ transform:translateX(5px); } }
+  .flash{ animation:flash 1.1s ease-out forwards; pointer-events:none; }
+  @keyframes flash{ from{ opacity:.9; } to{ opacity:0; } }
+
+  .end{ position:fixed; inset:0; z-index:60; display:none; place-items:center; background:#000c; padding:16px; }
+  .end.show{ display:grid; }
+  .end .card{ width:min(460px,100%); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:22px 24px; }
+  .end h2{ margin:0 0 4px; font-size:18px; }
+  .end p{ margin:0 0 14px; color:var(--amber); }
+  .stats{ display:grid; grid-template-columns:1fr auto; gap:4px 16px; margin:0 0 16px; font-size:14px; }
+  .stats dt{ color:var(--dim); } .stats dd{ margin:0; text-align:right; font-variant-numeric:tabular-nums; }
+  .btns{ display:flex; flex-wrap:wrap; gap:8px; }
+  .btn{ background:#2a261c; border:1px solid var(--line); border-radius:4px; padding:6px 12px; cursor:pointer; }
+  .btn:hover{ border-color:var(--dim); }
+  .btn.on{ border-color:var(--amber); color:var(--amber); }
+  textarea{ width:100%; height:110px; margin-top:10px; background:#0c0b08; color:var(--ink); border:1px solid var(--line); border-radius:4px; font:12px/1.4 ui-monospace,Consolas,monospace; }
+
+  .debug{ position:fixed; z-index:70; right:0; top:0; bottom:0; width:min(360px,100%); background:#100e0a; border-left:1px solid var(--line); padding:16px; overflow-x:hidden; overflow-y:auto; transform:translateX(100%); transition:transform .18s; font-size:13px; }
+  .debug.show{ transform:none; }
+  .debug h3{ margin:16px 0 6px; font-size:12px; color:var(--dim); font-weight:500; letter-spacing:.1em; }
+  .debug h3:first-child{ margin-top:0; }
+  .debug dl{ margin:0; } .debug dt{ color:var(--dim); margin-top:6px; } .debug dd{ margin:0; }
+  .debug pre{ margin:0; white-space:pre-wrap; color:var(--dim); font:12px/1.45 ui-monospace,Consolas,monospace; }
+
+  @media (max-width:860px){
+    main{ grid-template-columns:1fr; }
+    .cuts{ grid-template-columns:repeat(5,1fr); }
+    .viewer{ width:100%; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <radialGradient id="gLamp"><stop offset="0" stop-color="#ffcf7a" stop-opacity=".6"/><stop offset="1" stop-color="#ffcf7a" stop-opacity="0"/></radialGradient>
+  <radialGradient id="gCandle"><stop offset="0" stop-color="#ffd58a" stop-opacity=".55"/><stop offset="1" stop-color="#ffd58a" stop-opacity="0"/></radialGradient>
+  <radialGradient id="gVig" cx="50%" cy="50%" r="75%"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></radialGradient>
+</defs></svg>
+
+<header>
+  <h1>胶卷台</h1>
+  <span class="sub">一把钥匙的一夜</span>
+  <button class="gear" id="gear" title="调试面板（D）">调试</button>
+</header>
+
+<main>
+  <section>
+    <div class="viewer" id="viewer"></div>
+    <div class="statusbar"><span id="fnum"></span><span id="ruleText"></span><span id="count"></span></div>
+    <div class="strip" id="strip"></div>
+  </section>
+  <aside class="tray">
+    <h2>剪片</h2>
+    <div class="cuts" id="cuts"></div>
+    <p class="hint">把剪片拖到破损处贴上。点一下已贴的剪片可以撕掉。</p>
+  </aside>
+</main>
+
+<div class="ghost" id="ghost"></div>
+
+<div class="end" id="end"><div class="card">
+  <h2>这卷胶片修好了</h2>
+  <p>钥匙最后在窗边的地板下。</p>
+  <dl class="stats" id="stats"></dl>
+  <div class="btns">
+    <button class="btn" id="copyLog">复制试玩日志</button>
+    <button class="btn" id="again">再来一次</button>
+    <button class="btn" id="swap">换另一种规则</button>
+  </div>
+  <textarea id="logdump" hidden readonly></textarea>
+</div></div>
+
+<aside class="debug" id="debug">
+  <h3>规则</h3>
+  <div class="btns">
+    <button class="btn" data-rule="a">A 贴对一处就显影</button>
+    <button class="btn" data-rule="b">B 贴对三处才显影</button>
+  </div>
+  <h3>操作</h3>
+  <div class="btns">
+    <button class="btn" id="dbgReset">重置</button>
+    <button class="btn" id="dbgSolve">直接修好</button>
+    <button class="btn" id="dbgCopy">复制日志</button>
+    <button class="btn" id="dbgClose">关闭</button>
+  </div>
+  <h3>答案</h3>
+  <pre id="answers"></pre>
+  <h3>最近的操作</h3>
+  <pre id="logtail"></pre>
+  <h3>关于这个原型</h3>
+  <dl>
+    <dt>问题</dt><dd>把剪片贴进破损的帧，能不能让人真的去推理？对比两种确认方式。</dd>
+    <dt>动词</dt><dd>看（逐帧对照）、贴、撕下重贴。</dd>
+    <dt>想要的体验</dt><dd>对照几帧后"我想明白了"，而不是把十张剪片挨个试一遍。</dd>
+    <dt>试玩时看什么</dt><dd>贴之前有没有来回翻帧；贴错几次；先解哪一处；能不能说出理由。</dd>
+    <dt>结论</dt><dd>提案成立，B 好于 A（显影前要留不确定性）。但玩起来是"找不同"，只靠对照前后帧就能解完；它是个纯 2D 游戏，且只有一个固定答案。下一步：贴的过程 3D 化；像 Storyteller 那样允许多解。（2026-11-17）</dd>
+  </dl>
+</aside>
+
+<script>
+/* ---------- 绘图基础 ---------- */
+const C = { girl:'#d2a038', father:'#34425f', maid:'#4e7556', ink:'#2b2620', skin:'#cdaa8a' };
+const at = (x,y,inner,rot=0,s=1) => `<g transform="translate(${x} ${y}) rotate(${rot}) scale(${s})">${inner}</g>`;
+const arm = (x1,y1,x2,y2,c) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="7" stroke-linecap="round"/><circle cx="${x2}" cy="${y2}" r="4.2" fill="${C.skin}" stroke="${C.ink}" stroke-width="1"/>`;
+const tongs = (x1,y1,x2,y2,dx=3,dy=0,ex=4,ey=1) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#242424" stroke-width="3" stroke-linecap="round"/><line x1="${x1+dx}" y1="${y1+dy}" x2="${x2+ex}" y2="${y2+ey}" stroke="#242424" stroke-width="3" stroke-linecap="round"/><circle cx="${x1+dx/2}" cy="${y1+dy/2}" r="3.5" fill="#242424"/>`;
+const lampGlow = (x,y) => `<circle cx="${x}" cy="${y}" r="76" fill="url(#gLamp)"/>`;
+const candleGlow = (x,y) => `<circle cx="${x}" cy="${y}" r="48" fill="url(#gCandle)"/>`;
+const doorLight = () => `<polygon points="42,290 98,290 214,360 64,360" fill="#f3d38d" opacity=".3"/>`;
+
+/* 人和物：原点都在脚底 / 底边中点（提灯在灯身顶边中点） */
+const P = {
+  girl(kneel){ const h = kneel ? 44 : 70, cy = -h - 10;
+    return `<circle cx="-13" cy="${cy+2}" r="4.5" fill="#6b4a2c"/><circle cx="13" cy="${cy+2}" r="4.5" fill="#6b4a2c"/>`
+      + `<polygon points="-10,${-h} 10,${-h} 18,0 -18,0" fill="${C.girl}" stroke="${C.ink}" stroke-width="2" stroke-linejoin="round"/>`
+      + `<circle cx="0" cy="${cy}" r="11" fill="${C.skin}" stroke="${C.ink}" stroke-width="2"/>`; },
+  father(){ return `<rect x="-17" y="-124" width="34" height="124" rx="7" fill="${C.father}" stroke="${C.ink}" stroke-width="2"/>`
+      + `<circle cx="0" cy="-137" r="14" fill="${C.skin}" stroke="${C.ink}" stroke-width="2"/>`
+      + `<rect x="-18" y="-154" width="36" height="6" rx="2" fill="${C.ink}"/><rect x="-11" y="-170" width="22" height="17" rx="2" fill="${C.ink}"/>`; },
+  maid(){ return `<polygon points="-14,-116 14,-116 25,0 -25,0" fill="${C.maid}" stroke="${C.ink}" stroke-width="2" stroke-linejoin="round"/>`
+      + `<polygon points="-8,-92 8,-92 14,-8 -14,-8" fill="#ece7d9" stroke="${C.ink}" stroke-width="1"/>`
+      + `<circle cx="0" cy="-128" r="13" fill="${C.skin}" stroke="${C.ink}" stroke-width="2"/>`
+      + `<path d="M -13 -131 A 13 12 0 0 1 13 -131 Z" fill="#f4f0e6" stroke="${C.ink}" stroke-width="1.5"/>`; },
+  key(){ return `<circle cx="-8" cy="0" r="5" fill="none" stroke="#4d3806" stroke-width="5.4"/><rect x="-3.5" y="-2.6" width="20.5" height="5.2" fill="#4d3806"/>`
+      + `<rect x="8.4" y="0" width="4.2" height="7.3" fill="#4d3806"/><rect x="13" y="0" width="3.8" height="6.3" fill="#4d3806"/>`
+      + `<circle cx="-8" cy="0" r="5" fill="none" stroke="#e8bc2c" stroke-width="3"/><rect x="-3" y="-1.5" width="19" height="3" fill="#e8bc2c"/>`
+      + `<rect x="9.2" y="1" width="2.6" height="5.5" fill="#e8bc2c"/><rect x="13.7" y="1" width="2.3" height="4.5" fill="#e8bc2c"/>`; },
+  doll(open){ return `<line x1="-7" y1="-14" x2="-12" y2="-7" stroke="#c56f86" stroke-width="4" stroke-linecap="round"/><line x1="7" y1="-14" x2="12" y2="-7" stroke="#c56f86" stroke-width="4" stroke-linecap="round"/>`
+      + `<rect x="-7" y="-18" width="14" height="18" rx="4" fill="#c56f86" stroke="#4d2330" stroke-width="1.5"/><circle cx="0" cy="-24" r="6.5" fill="#ecd2b8" stroke="#4d2330" stroke-width="1.5"/>`
+      + (open ? `<line x1="0" y1="-15" x2="0" y2="-3" stroke="#22090f" stroke-width="3.2" stroke-linecap="round"/>` : ''); },
+  stool(){ return `<line x1="-12" y1="-25" x2="-15" y2="0" stroke="#5c4229" stroke-width="4"/><line x1="12" y1="-25" x2="15" y2="0" stroke="#5c4229" stroke-width="4"/>`
+      + `<rect x="-17" y="-30" width="34" height="7" rx="2" fill="#8a6540" stroke="#3d2b18" stroke-width="1.5"/>`; },
+  candle(){ return `<ellipse cx="0" cy="0" rx="13" ry="3.5" fill="#dcd6c6" stroke="#55514a" stroke-width="1.2"/><rect x="-2.5" y="-15" width="5" height="14" fill="#f6efd8" stroke="#77705f" stroke-width=".8"/>`
+      + `<ellipse cx="0" cy="-20" rx="3" ry="5.5" fill="#ffb53a"/><ellipse cx="0" cy="-19" rx="1.4" ry="3" fill="#fff1b8"/>`; },
+  lantern(){ return `<path d="M -5 -3 Q 0 -15 5 -3" fill="none" stroke="#33240f" stroke-width="2"/><rect x="-8" y="-4" width="16" height="4" fill="#33240f"/>`
+      + `<rect x="-7" y="0" width="14" height="18" fill="#f2bd4d" stroke="#33240f" stroke-width="2"/><line x1="0" y1="0" x2="0" y2="18" stroke="#33240f" stroke-width="1.2"/><rect x="-8" y="18" width="16" height="3" fill="#33240f"/>`; },
+  letter(){ return `<rect x="-11" y="-14" width="22" height="14" fill="#f2ecdc" stroke="#6b6455" stroke-width="1.2"/><polyline points="-11,-14 0,-6 11,-14" fill="none" stroke="#6b6455" stroke-width="1.2"/>`; },
+};
+
+/* 剪片图标，画在 60x72 的小画布里 */
+const ICON = {
+  girl:   () => at(30,68,P.girl(false),0,.7),
+  father: () => at(30,70,P.father(),0,.4),
+  maid:   () => at(30,69,P.maid(),0,.46),
+  key:    () => at(27,36,P.key(),-35,2.1),
+  doll:   () => at(30,63,P.doll(false),0,1.9),
+  stool:  () => at(30,56,P.stool(),0,1.35),
+  candle: () => at(30,57,P.candle(),0,1.9),
+  lantern:() => at(30,28,P.lantern(),0,1.8),
+  tongs:  () => tongs(23,10,33,62),
+  letter: () => at(30,51,P.letter(),0,2.1),
+};
+const CUT = { girl:'女孩', father:'父亲', maid:'女仆', key:'钥匙', doll:'玩偶', stool:'凳子', candle:'蜡烛', lantern:'提灯', tongs:'火钳', letter:'信封' };
+const TRAY = ['lantern','girl','letter','tongs','father','doll','candle','maid','stool','key'];
+
+/* ---------- 房间（侧视剖面，640x360，地面在 y=290） ---------- */
+function room(o){
+  const night = o.time !== 'dusk';
+  let s = `<rect width="640" height="290" fill="${night ? '#bdb6a4' : '#d6cbb3'}"/><rect y="250" width="640" height="40" fill="${night ? '#aaa392' : '#c4b89f'}"/>`;
+  // 窗
+  s += `<rect x="410" y="88" width="70" height="112" fill="${night ? '#232c47' : '#e0a765'}" stroke="#5b5446" stroke-width="5"/>`
+     + `<line x1="445" y1="88" x2="445" y2="200" stroke="#5b5446" stroke-width="3"/><line x1="410" y1="144" x2="480" y2="144" stroke="#5b5446" stroke-width="3"/>`
+     + (night ? `<circle cx="462" cy="113" r="8" fill="#e9e6d4"/>` : '')
+     + `<rect x="402" y="200" width="86" height="8" fill="#8f8672" stroke="#5b5446" stroke-width="1.5"/>`;
+  // 门
+  s += `<rect x="38" y="128" width="64" height="162" fill="#5b5446"/>`;
+  if (o.door === 'open') s += `<rect x="42" y="132" width="56" height="158" fill="#f0cf8c"/><polygon points="42,132 54,142 54,290 42,290" fill="#7a6549" stroke="#3f3526" stroke-width="1.5"/>`;
+  else s += `<rect x="42" y="132" width="56" height="158" fill="#8b7355" stroke="#3f3526" stroke-width="1.5"/><rect x="48" y="140" width="44" height="60" fill="none" stroke="#6d5a41" stroke-width="2"/><rect x="48" y="212" width="44" height="66" fill="none" stroke="#6d5a41" stroke-width="2"/><circle cx="91" cy="206" r="3.2" fill="#d8c08a"/>`;
+  // 衣柜
+  if (o.wardrobe === 'ajar') s += `<rect x="122" y="108" width="76" height="182" fill="#221d15"/>` + at(170,288,P.girl(false))
+     + `<rect x="122" y="108" width="40" height="182" fill="#86795f" stroke="#4a4335" stroke-width="2"/><rect x="178" y="108" width="20" height="182" fill="#786c54" stroke="#4a4335" stroke-width="2"/>`;
+  else s += `<rect x="122" y="108" width="76" height="182" fill="#86795f" stroke="#4a4335" stroke-width="2"/><line x1="160" y1="108" x2="160" y2="290" stroke="#4a4335" stroke-width="2"/><circle cx="154" cy="204" r="2.6" fill="#3d382e"/><circle cx="166" cy="204" r="2.6" fill="#3d382e"/>`;
+  s += `<rect x="118" y="101" width="84" height="8" fill="#6e6350" stroke="#4a4335" stroke-width="1.5"/>`;
+  // 壁炉、钩子、信封、火钳架
+  s += `<rect x="524" y="178" width="98" height="112" fill="#7b7463" stroke="#4a4439" stroke-width="2"/><rect x="542" y="206" width="62" height="84" fill="#231f18"/>`
+     + `<ellipse cx="566" cy="284" rx="12" ry="4" fill="#b5531e"/><ellipse cx="586" cy="286" rx="9" ry="3" fill="#8c3a14"/>`
+     + `<rect x="516" y="170" width="114" height="10" fill="#5f5848" stroke="#3d382e" stroke-width="1.5"/>`
+     + `<rect x="562" y="128" width="8" height="8" fill="#2f2f2f"/><path d="M 566 136 v 6 q 0 4 -4 4" fill="none" stroke="#2f2f2f" stroke-width="2"/>`;
+  if (o.key === 'hook') s += at(566,156,P.key(),90);
+  s += at(536,170,P.letter());
+  s += `<rect x="497" y="218" width="7" height="7" fill="#2f2f2f"/>`;
+  if (o.tongs === 'rack') s += tongs(499,226,498,284);
+  if (o.tongs === 'floor') s += tongs(482,285,512,283,1,3,0,4);
+  // 凳子
+  if (o.stool === 'home') s += at(216,290,P.stool());
+  if (o.stool === 'hook') s += at(556,290,P.stool());
+  // 床
+  s += `<rect x="240" y="212" width="10" height="78" fill="#6e6350" stroke="#4a4335" stroke-width="1.5"/><rect x="250" y="276" width="7" height="14" fill="#6e6350"/><rect x="379" y="276" width="7" height="14" fill="#6e6350"/>`
+     + `<rect x="246" y="264" width="142" height="13" fill="#6e6350" stroke="#4a4335" stroke-width="1.5"/>`;
+  if (o.bed === 'tossed') s += `<g transform="rotate(-5 250 264)"><rect x="250" y="246" width="134" height="18" rx="5" fill="#ddd6c4" stroke="#6b6455" stroke-width="1.5"/></g>`
+     + `<polygon points="292,250 340,206 384,222 386,262 320,262" fill="#8a6b6b" stroke="#4d3a3a" stroke-width="1.5" stroke-linejoin="round"/>`
+     + `<rect x="210" y="273" width="34" height="13" rx="6" fill="#efeadb" stroke="#6b6455" stroke-width="1.2" transform="rotate(-12 227 280)"/>`;
+  else s += `<rect x="250" y="246" width="134" height="18" rx="5" fill="#ddd6c4" stroke="#6b6455" stroke-width="1.5"/><rect x="256" y="236" width="34" height="12" rx="6" fill="#efeadb" stroke="#6b6455" stroke-width="1.2"/>`
+     + `<rect x="298" y="243" width="86" height="23" rx="4" fill="#8a6b6b" stroke="#4d3a3a" stroke-width="1.5"/>`;
+  if (o.doll === 'bed') s += at(360,246,P.doll(false));
+  if (o.doll === 'sill') s += at(446,200,P.doll(true));
+  // 地面与地板下
+  s += `<rect y="290" width="640" height="70" fill="#4f4839"/><rect y="290" width="640" height="9" fill="#93876d" stroke="#4a4439" stroke-width="1"/>`;
+  for (const x of [56,116,176,236,296,356,416,476,536,596]) s += `<line x1="${x}" y1="290" x2="${x}" y2="299" stroke="#4a4439" stroke-width="1"/>`;
+  if (o.board === 'lifted') s += `<rect x="416" y="289" width="60" height="11" fill="#17130d"/><rect x="420" y="300" width="52" height="34" fill="#2b251b" stroke="#17130d" stroke-width="1"/>`
+     + `<polygon points="476,290 420,270 418,278 476,299" fill="#a3967a" stroke="#4a4439" stroke-width="1.5" stroke-linejoin="round"/>`;
+  if (o.board === 'cutaway') s += `<rect x="420" y="300" width="52" height="34" fill="#2b251b" stroke="#c9bb97" stroke-width="1.2" stroke-dasharray="4 3"/>`;
+  return s;
+}
+
+/* ---------- 六帧。hole = 破损处；draw(d) 的 d 表示这一处是否已显影 ---------- */
+const FRAMES = [
+  { time:'dusk', hole:null,
+    draw: () => ({
+      base: room({ time:'dusk', key:'hook', stool:'home', tongs:'rack', doll:'bed' })
+        + at(290,246,P.girl(true)) + at(598,290,P.father())
+        + arm(583,184,570,150,C.father) + arm(613,184,624,222,C.father) + at(624,228,P.lantern()),
+      glow: lampGlow(624,238) }) },
+
+  { time:'night', hole:{ x:524, y:122, w:66, h:140, ans:'girl' },
+    draw: d => ({
+      base: room({ stool:'hook', tongs:'rack', doll:'bed' })
+        + (d ? at(554,260,P.girl(false)) + arm(561,196,566,160,C.girl) + at(566,156,P.key(),90) : ''),
+      glow: '' }) },
+
+  { time:'night', hole:{ x:336, y:200, w:50, h:50, ans:'doll' },
+    draw: d => ({
+      base: room({ stool:'hook', tongs:'rack' })
+        + at(312,290,P.girl(true)) + arm(320,252,331,238,C.girl)
+        + (d ? at(360,246,P.doll(true)) + at(350,234,P.key(),0,.9) : at(336,234,P.key())),
+      glow: '' }) },
+
+  { time:'night', hole:{ x:38, y:130, w:68, h:162, ans:'maid' },
+    draw: d => ({
+      base: room({ door:'open', wardrobe:'ajar', stool:'hook', tongs:'rack', doll:'bed' })
+        + (d ? at(74,290,P.maid()) + arm(86,198,112,225,C.maid) : `<circle cx="112" cy="225" r="4.2" fill="${C.skin}" stroke="${C.ink}" stroke-width="1"/>`)
+        + at(121,224,P.candle()),
+      glow: doorLight() + candleGlow(121,205) }) },
+
+  { time:'night', hole:{ x:402, y:238, w:44, h:56, ans:'tongs' },
+    draw: d => ({
+      base: room({ stool:'hook', doll:'sill', board:'lifted' })
+        + at(471,197,P.key()) + at(388,290,P.girl(true))
+        + (d ? tongs(408,248,428,285) + arm(396,254,409,251,C.girl) : ''),
+      glow: '' }) },
+
+  { time:'night', hole:{ x:422, y:302, w:48, h:30, ans:'key' },
+    draw: d => ({
+      base: room({ door:'open', stool:'hook', tongs:'floor', bed:'tossed', board:'cutaway' })
+        + at(72,290,P.maid()) + arm(84,198,100,225,C.maid) + at(109,224,P.candle())
+        + at(300,290,P.father()) + arm(315,184,335,200,C.father) + at(338,203,P.lantern())
+        + at(446,290,P.girl(false)) + arm(454,238,462,256,C.girl) + at(466,272,P.doll(false))
+        + (d ? at(444,318,P.key()) : ''),
+      glow: doorLight() + candleGlow(109,205) + lampGlow(338,213) }) },
+];
+const HOLES = FRAMES.map((f,i) => f.hole ? i : -1).filter(i => i >= 0);
+
+/* ---------- 破损处与贴上去的剪片 ---------- */
+function rng(seed){ let s = (seed * 9301 + 49297) % 233280; return () => (s = (s * 9301 + 49297) % 233280) / 233280; }
+function patch(h, seed){
+  const r = rng(seed), j = () => (r() - .5) * 5, pts = [], step = 8;
+  for (let x = h.x; x < h.x + h.w; x += step) pts.push([x, h.y + j()]);
+  for (let y = h.y; y < h.y + h.h; y += step) pts.push([h.x + h.w + j(), y]);
+  for (let x = h.x + h.w; x > h.x; x -= step) pts.push([x, h.y + h.h + j()]);
+  for (let y = h.y + h.h; y > h.y; y -= step) pts.push([h.x + j(), y]);
+  let sc = '';
+  for (let i = 0; i < 5; i++){ const x = h.x + 4 + r() * (h.w - 8), y = h.y + 3 + r() * Math.max(2, h.h - 16);
+    sc += `<line x1="${x.toFixed(1)}" y1="${y.toFixed(1)}" x2="${(x + (r() - .5) * 8).toFixed(1)}" y2="${(y + 5 + r() * 7).toFixed(1)}" stroke="#4a4234" stroke-width="1"/>`; }
+  return `<polygon class="patch" points="${pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}" fill="#16130e" stroke="#e8b24a" stroke-width="1.6" stroke-dasharray="5 4"/>${sc}`;
+}
+function pasteCard(h, id){
+  const sc = Math.max(.62, Math.min((h.w - 8) / 60, (h.h - 8) / 72, 1)), w = 60 * sc, hh = 72 * sc;
+  const cx = h.x + h.w / 2, cy = h.y + h.h / 2, x = cx - w / 2, y = cy - hh / 2;
+  return `<g transform="rotate(-4 ${cx} ${cy})"><rect x="${x}" y="${y}" width="${w}" height="${hh}" rx="2" fill="#f1ead8" stroke="#2b2620" stroke-width="1.2"/>`
+    + `<svg x="${x}" y="${y}" width="${w}" height="${hh}" viewBox="0 0 60 72">${ICON[id]()}</svg>`
+    + `<rect x="${cx - 9}" y="${y - 3}" width="18" height="6" fill="#d9c88f" opacity=".9"/></g>`;
+}
+function scratches(i){ const r = rng(i + 11); let s = '';
+  for (let k = 0; k < 3; k++){ const x = r() * 640; s += `<line x1="${x.toFixed(0)}" y1="0" x2="${(x + r() * 6 - 3).toFixed(0)}" y2="360" stroke="#fff" stroke-opacity=".07" stroke-width="1"/>`; }
+  return s; }
+
+function frameSVG(i, big){
+  const f = FRAMES[i], h = f.hole, d = state.done[i], L = f.draw(d);
+  let s = L.base;
+  s += f.time === 'dusk' ? `<rect width="640" height="360" fill="#8a4a12" opacity=".1"/>` : `<rect width="640" height="360" fill="#121a36" opacity=".34"/>`;
+  s += L.glow;
+  if (h && !d){ s += patch(h, i + 3); if (state.placed[i]) s += `<g class="${state.wrong === i ? 'shake' : ''}">${pasteCard(h, state.placed[i])}</g>`; }
+  s += `<rect width="640" height="360" fill="url(#gVig)"/>` + scratches(i);
+  if (h && d && state.fresh.has(i)) s += `<rect class="flash" x="${h.x - 14}" y="${h.y - 14}" width="${h.w + 28}" height="${h.h + 28}" rx="6" fill="#fff3c4"/>`;
+  if (big && h && !d) s += `<rect class="hit" data-hole="${i}" x="${h.x - 10}" y="${h.y - 10}" width="${h.w + 20}" height="${h.h + 20}" fill="transparent"/>`;
+  return `<svg class="frame" viewBox="0 0 640 360" xmlns="http://www.w3.org/2000/svg">${s}</svg>`;
+}
+
+/* ---------- 状态与规则 ---------- */
+const $ = s => document.querySelector(s);
+let state;
+const elapsed = () => ((performance.now() - state.t0) / 1000).toFixed(1);
+const log = e => state.log.push({ t:+elapsed(), ...e });
+
+function reset(rule){
+  clearTimeout(wrongTimer);
+  state = { rule: rule || (state && state.rule) || 'a', sel:0, placed:FRAMES.map(() => null), done:FRAMES.map(() => false),
+    held:null, wrong:null, fresh:new Set(), finished:false, log:[], n:{ paste:0, wrong:0, views:0, removes:0 },
+    t0:performance.now(), started:new Date().toISOString() };
+  $('#end').classList.remove('show'); $('#logdump').hidden = true;
+  $('#copyLog').textContent = '复制试玩日志'; $('#dbgCopy').textContent = '复制日志';
+  render();
+}
+function select(i){
+  if (i === state.sel || i < 0 || i >= FRAMES.length) return;
+  state.sel = i;
+  if (!state.finished){ state.n.views++; log({ ev:'view', f:i + 1 }); }   // 修好之后的回看不算进试玩数据
+  render();
+}
+function develop(list){
+  list.forEach(i => { state.done[i] = true; state.fresh.add(i); });
+  log({ ev:'develop', frames:list.map(i => i + 1) });
+  setTimeout(() => list.forEach(i => state.fresh.delete(i)), 1200);
+}
+function checkBatch(){
+  for (;;){
+    const rem = HOLES.filter(i => !state.done[i]), need = Math.min(3, rem.length);
+    const good = rem.filter(i => state.placed[i] === FRAMES[i].hole.ans);
+    if (!need || good.length < need) return;
+    develop(good.slice(0, need));
+  }
+}
+let wrongTimer = null;
+function clearWrong(){ if (state.wrong === null) return; clearTimeout(wrongTimer); state.placed[state.wrong] = null; state.wrong = null; }
+function place(i, id){
+  const f = FRAMES[i];
+  if (!f.hole || state.done[i] || state.finished) return;
+  clearWrong();                                  // 上一张贴错的还在抖时，不吞掉新的操作
+  const ok = f.hole.ans === id;
+  state.placed[i] = id; state.n.paste++; if (!ok) state.n.wrong++;
+  log({ ev:'paste', f:i + 1, cut:id, ok });
+  if (state.rule === 'a'){
+    if (ok) develop([i]);
+    else { state.wrong = i; render(); wrongTimer = setTimeout(() => { clearWrong(); render(); }, 700); return; }
+  } else checkBatch();
+  render(); checkFinish();
+}
+function removePaste(i){
+  clearWrong();
+  if (state.done[i] || !state.placed[i]) return;
+  log({ ev:'remove', f:i + 1, cut:state.placed[i] }); state.n.removes++; state.placed[i] = null; render();
+}
+function checkFinish(){
+  if (state.finished || !HOLES.every(i => state.done[i])) return;
+  state.finished = true; state.seconds = +elapsed(); log({ ev:'done' }); render();
+  setTimeout(showEnd, 1300);
+}
+function showEnd(){
+  if (!state.finished) return;
+  $('#stats').innerHTML = [
+    ['规则', state.rule === 'a' ? 'A 贴对一处就显影' : 'B 贴对三处才显影'],
+    ['用时', state.seconds + ' 秒'], ['贴了几次', state.n.paste], ['其中贴错', state.n.wrong],
+    ['自己撕掉重贴', state.n.removes], ['翻看帧的次数', state.n.views],
+  ].map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
+  $('#end').classList.add('show');
+}
+function exportLog(){
+  return JSON.stringify({ proto:'film-desk', rule:state.rule, started:state.started, seconds:state.finished ? state.seconds : +elapsed(), finished:state.finished, counts:state.n, log:state.log }, null, 1);
+}
+async function copyLog(btn){
+  const txt = exportLog();
+  try { await navigator.clipboard.writeText(txt); btn.textContent = '已复制'; }
+  catch { const ta = $('#logdump'); ta.hidden = false; ta.value = txt; $('#end').classList.add('show'); ta.select(); btn.textContent = '已选中，请手动复制'; }
+}
+
+/* ---------- 画面 ---------- */
+function render(){
+  $('#viewer').innerHTML = frameSVG(state.sel, true);
+  $('#strip').innerHTML = FRAMES.map((f,i) =>
+    `<button class="cell ${i === state.sel ? 'sel' : ''} ${f.hole ? (state.done[i] ? 'fixed' : 'damaged') : ''}" data-cell="${i}" aria-label="第 ${i + 1} 帧">${frameSVG(i, false)}<span class="num">${i + 1}</span></button>`).join('');
+  $('#cuts').innerHTML = TRAY.map(id => {
+    const used = HOLES.filter(i => !state.done[i] && state.placed[i] === id).map(i => i + 1);
+    return `<button class="cut ${state.held === id ? 'held' : ''}" data-cut="${id}"><svg viewBox="0 0 60 72">${ICON[id]()}</svg><span>${CUT[id]}</span>${used.length ? `<i class="used">第 ${used.join('、')} 帧</i>` : ''}</button>`;
+  }).join('');
+  const fixed = HOLES.filter(i => state.done[i]).length, rem = HOLES.length - fixed;
+  $('#fnum').textContent = `第 ${state.sel + 1} 帧`;
+  $('#ruleText').textContent = !rem ? '这卷胶片修好了。' : state.rule === 'a' ? '贴对一处，立刻显影。' : rem >= 3 ? '贴对三处，才会一起显影。' : '剩下两处，要同时贴对。';
+  $('#count').textContent = `已显影 ${fixed} / ${HOLES.length}`;
+  document.body.classList.toggle('holding', !!state.held);
+  document.querySelectorAll('[data-rule]').forEach(b => b.classList.toggle('on', b.dataset.rule === state.rule));
+  $('#answers').textContent = HOLES.map(i => `第 ${i + 1} 帧：${CUT[FRAMES[i].hole.ans]}${state.done[i] ? '（已显影）' : state.placed[i] ? '（现在贴的是' + CUT[state.placed[i]] + '）' : ''}`).join('\n');
+  $('#logtail').textContent = state.log.slice(-12).map(e => `${e.t.toFixed(1)}s  ${e.ev}${e.f ? ' 帧' + e.f : ''}${e.cut ? ' ' + CUT[e.cut] : ''}${e.ok === undefined ? '' : e.ok ? ' ✓' : ' ✗'}${e.frames ? ' 帧' + e.frames.join(',') : ''}`).join('\n') || '还没有操作';
+}
+
+/* ---------- 输入：拖拽贴、点选贴、键盘翻帧 ---------- */
+let drag = null;
+const ghost = $('#ghost');
+function endDrag(){ drag = null; ghost.style.display = 'none'; document.body.classList.remove('dragging'); }
+$('#cuts').addEventListener('pointerdown', e => {
+  const b = e.target.closest('.cut'); if (!b || state.finished) return;
+  e.preventDefault(); drag = { id:b.dataset.cut, x:e.clientX, y:e.clientY, moved:false };
+});
+window.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 6){
+    drag.moved = true; ghost.innerHTML = `<svg viewBox="0 0 60 72">${ICON[drag.id]()}</svg>`; ghost.style.display = 'block'; document.body.classList.add('dragging');
+  }
+  if (drag.moved){ ghost.style.left = e.clientX + 'px'; ghost.style.top = e.clientY + 'px'; }
+});
+window.addEventListener('pointerup', e => {
+  if (!drag) return;
+  const { id, moved } = drag; endDrag();
+  if (!moved){ state.held = state.held === id ? null : id; render(); return; }
+  state.held = null;
+  const hit = document.elementFromPoint(e.clientX, e.clientY);
+  const cell = hit && hit.closest('[data-cell]');
+  if (cell){ const i = +cell.dataset.cell; if (FRAMES[i].hole && !state.done[i]){ select(i); place(i, id); return; } }
+  else if (hit && hit.closest('#viewer') && FRAMES[state.sel].hole && !state.done[state.sel]){ place(state.sel, id); return; }
+  render();
+});
+window.addEventListener('pointercancel', endDrag);
+$('#cuts').addEventListener('click', e => {           // 键盘回车选中剪片
+  const b = e.target.closest('.cut'); if (!b || e.detail !== 0) return;
+  state.held = state.held === b.dataset.cut ? null : b.dataset.cut; render();
+});
+$('#viewer').addEventListener('click', e => {
+  const i = state.sel, open = FRAMES[i].hole && !state.done[i];
+  if (state.held){ const id = state.held; state.held = null; if (open) place(i, id); render(); }   // 手里拿着剪片时，点这一帧任何位置都算贴
+  else if (e.target.closest('[data-hole]')) removePaste(i);
+});
+$('#strip').addEventListener('click', e => { const c = e.target.closest('[data-cell]'); if (c) select(+c.dataset.cell); });
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowRight') select(state.sel + 1);
+  else if (e.key === 'ArrowLeft') select(state.sel - 1);
+  else if (e.key >= '1' && e.key <= '6') select(+e.key - 1);
+  else if (e.key === 'd' || e.key === 'D') $('#debug').classList.toggle('show');
+  else if (e.key === 'Escape'){ state.held = null; $('#debug').classList.remove('show'); render(); }
+});
+
+/* ---------- 调试与结束面板 ---------- */
+$('#gear').addEventListener('click', () => $('#debug').classList.toggle('show'));
+$('#dbgClose').addEventListener('click', () => $('#debug').classList.remove('show'));
+$('#dbgReset').addEventListener('click', () => reset());
+$('#dbgSolve').addEventListener('click', () => { HOLES.forEach(i => { if (!state.done[i]){ state.placed[i] = FRAMES[i].hole.ans; develop([i]); } }); log({ ev:'debug-solve' }); render(); checkFinish(); });
+$('#dbgCopy').addEventListener('click', e => copyLog(e.currentTarget));
+document.querySelectorAll('[data-rule]').forEach(b => b.addEventListener('click', () => reset(b.dataset.rule)));
+$('#copyLog').addEventListener('click', e => copyLog(e.currentTarget));
+$('#again').addEventListener('click', () => reset());
+$('#swap').addEventListener('click', () => reset(state.rule === 'a' ? 'b' : 'a'));
+
+reset(new URLSearchParams(location.search).get('rule') === 'b' || location.hash === '#b' ? 'b' : 'a');
+</script>
+</body>
+</html>

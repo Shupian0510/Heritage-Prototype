@@ -1,0 +1,21 @@
+# Unreal generated
+Binaries/
+Intermediate/
+DerivedDataCache/
+Saved/
+Builds/
+Build/*/FileOpenOrder/
+.vs/
+*.sln
+*.slnx
+*.suo
+*.VC.db
+*.opensdf
+*.sdf
+
+# Web prototypes
+node_modules/
+dist/
+
+# Local agent settings
+.claude/settings.local.json

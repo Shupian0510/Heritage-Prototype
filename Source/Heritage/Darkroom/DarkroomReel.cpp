@@ -218,10 +218,13 @@ const TArray<FDarkroomClue>& DarkroomReel::Clues()
             DR_TEXT("地上的花", "Spilled Flowers"),
             DR_TEXT("花被随手倒在了地上。", "The flowers were dumped on the floor."),
             DR_TEXT("她要的不是花，是瓶里的水。", "It was not the flowers she wanted. It was the water.") },
+        // 底座上的诗是解开背板的关键：拍下时的字幕里一定要有（试玩时只写在笔记本里，没人读到）；
+        // 笔记本也留一份，因为同一条线索只能拍一次，字幕错过了还能翻回来看。
         { TEXT("Bust"), Bust, PropBust, FGameplayTag(), true,
             DR_TEXT("胸像", "Bust"),
-            DR_TEXT("老爷的胸像。底座上刻着：“目光所及，唯她一人。”", "The master's bust. Carved on the base: “My gaze rests on her alone.”"),
-            DR_TEXT("底座上有一圈磨痕。这尊胸像转得动。", "A ring of wear around the base. This bust can be turned.") },
+            DR_TEXT("老爷的胸像。底座上刻着一句诗：“目光所及，唯她一人。”底座上还有一圈磨痕，这尊胸像转得动。",
+                "The master's bust. A line of verse carved on the base: “My gaze rests on her alone.” A ring of wear around it: the bust can be turned."),
+            DR_TEXT("底座上刻着一句诗：“目光所及，唯她一人。”", "A line of verse carved on the base: “My gaze rests on her alone.”") },
         { TEXT("Portrait"), Portrait, PropPortrait, FGameplayTag(), true,
             DR_TEXT("画像", "Portrait"),
             DR_TEXT("画上是年轻时的夫人。", "The lady, painted when she was young."),
